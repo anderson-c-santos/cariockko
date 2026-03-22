@@ -27,6 +27,28 @@ Each lesson is a scripted dialogue between two characters. You play one characte
    ❌ Incorrect → Retry until successful
 ```
 
+## Screenshots
+
+After running `make start` and opening `http://localhost:3000`, you'll see:
+
+### 1. Home Page — Level Selection
+
+Choose between Beginner, Intermediate, and Advanced difficulty levels:
+
+![Home Page - Level Selection](docs/screenshots/01-home-level-selection.png)
+
+### 2. Lessons List
+
+Each level contains 3 AI-generated lessons:
+
+![Lessons List](docs/screenshots/02-lessons-list.png)
+
+### 3. Lesson Player
+
+Interactive dialogue with audio playback, translation, and voice recording:
+
+![Lesson Player](docs/screenshots/03-lesson-player.png)
+
 ## Features
 
 - **Three difficulty levels** — Beginner, Intermediate, and Advanced (3 lessons each, 9 total)
