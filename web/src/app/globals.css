@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sora: "Sora", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --color-bg: #FAFAFA;
+  --color-surface: #F5F5F5;
+  --color-text-primary: #000000;
+  --color-text-secondary: #5E5E5E;
+  --color-text-tertiary: #666666;
+  --color-text-muted: #999999;
+  --color-text-on-dark: #FAFAFA;
+  --color-accent: #DC2626;
+  --color-success: #22C55E;
+  --color-info: #3B82F6;
+  --color-border: #E5E5E5;
+}
+
 :root {
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --success: #16a34a;
-  --error: #dc2626;
+  --primary: #DC2626;
+  --success: #22C55E;
+  --error: #DC2626;
+}
+
+body {
+  font-family: "Sora", sans-serif;
+  background-color: #FAFAFA;
+  color: #000000;
 }
