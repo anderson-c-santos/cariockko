@@ -1,70 +1,66 @@
 import Link from "next/link";
+import { Sidebar } from "@/components/Sidebar";
 
 const levels = [
   {
     id: "beginner",
     title: "Beginner",
     titlePt: "Iniciante",
-    description: "Simple vocabulary and basic conversations",
-    descriptionPt: "Vocabulário simples e conversas básicas",
-    color: "bg-green-500",
-    hoverColor: "hover:bg-green-600",
+    description: "Vocabulário simples e conversas básicas",
   },
   {
     id: "intermediate",
     title: "Intermediate",
     titlePt: "Intermediário",
-    description: "Everyday topics and longer sentences",
-    descriptionPt: "Tópicos do dia a dia e frases mais longas",
-    color: "bg-yellow-500",
-    hoverColor: "hover:bg-yellow-600",
+    description: "Tópicos do dia a dia e frases mais longas",
   },
   {
     id: "advanced",
     title: "Advanced",
     titlePt: "Avançado",
-    description: "Complex discussions and nuanced language",
-    descriptionPt: "Discussões complexas e linguagem sofisticada",
-    color: "bg-red-500",
-    hoverColor: "hover:bg-red-600",
+    description: "Discussões complexas e linguagem sofisticada",
   },
 ];
 
 export default function Home() {
   return (
-    <main className="max-w-4xl mx-auto px-4 py-12">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold mb-2">Cariocko</h1>
-        <p className="text-lg text-gray-600">
-          Aprenda inglês conversando
-        </p>
-        <p className="text-sm text-gray-500 mt-1">
-          Practice English through interactive dialogues
-        </p>
-      </div>
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <main className="flex-1 px-16 py-12 flex flex-col gap-12">
+        <div className="flex flex-col gap-3">
+          <h1 className="font-sora text-[48px] font-semibold tracking-[-2px] text-black">
+            Cariockko
+          </h1>
+          <p className="font-sora text-sm text-[#5E5E5E]">
+            Aprenda inglês conversando / Practice English through interactive dialogues
+          </p>
+        </div>
 
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-center">
+        <h2 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
           Escolha seu nível / Choose your level
         </h2>
-        <div className="grid gap-4 md:grid-cols-3">
+
+        <div className="flex flex-col gap-6">
           {levels.map((level) => (
-            <Link
-              key={level.id}
-              href={`/lessons/${level.id}`}
-              className="block"
-            >
-              <div
-                className={`${level.color} ${level.hoverColor} text-white rounded-xl p-6 transition-all hover:shadow-lg hover:scale-[1.02]`}
-              >
-                <h3 className="text-2xl font-bold mb-1">{level.titlePt}</h3>
-                <p className="text-sm opacity-90 mb-2">{level.title}</p>
-                <p className="text-xs opacity-80">{level.descriptionPt}</p>
+            <Link key={level.id} href={`/lessons/${level.id}`} className="block">
+              <div className="flex border border-[#E5E5E5] hover:border-[#DC2626] transition-colors">
+                <div className="w-1 bg-[#DC2626] shrink-0" />
+                <div className="p-5 pl-6 flex flex-col gap-2 flex-1">
+                  <span className="font-mono text-xs font-medium tracking-[1px] text-[#5E5E5E]">
+                    {level.titlePt.toUpperCase()}
+                  </span>
+                  <h3 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+                    {level.title}
+                  </h3>
+                  <p className="font-sora text-[13px] text-[#5E5E5E]">
+                    {level.description}
+                  </p>
+                </div>
               </div>
             </Link>
           ))}
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

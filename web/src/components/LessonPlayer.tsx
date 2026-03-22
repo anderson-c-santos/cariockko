@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { Volume2, Mic, Square } from "lucide-react";
 
 interface DialogueExchange {
   id: string;
@@ -42,20 +43,22 @@ function ProcessingStatus({ phase }: { phase: ProcessingPhase }) {
   const currentIndex = phases.indexOf(phase);
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+    <div className="border border-[#E5E5E5] p-5 mb-4">
       <div className="flex items-center gap-3">
-        <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent" />
-        <span className="text-blue-800 font-medium">{PHASE_LABELS[phase]}</span>
+        <div className="animate-spin h-5 w-5 border-2 border-[#DC2626] border-t-transparent" />
+        <span className="font-sora text-sm font-medium text-[#000000]">
+          {PHASE_LABELS[phase]}
+        </span>
       </div>
       <div className="flex gap-2 mt-3">
         {phases.map((p, i) => (
           <div key={p} className="flex-1">
             <div
-              className={`h-1.5 rounded-full transition-all ${
-                i <= currentIndex ? "bg-blue-500" : "bg-blue-200"
+              className={`h-[3px] ${
+                i <= currentIndex ? "bg-[#DC2626]" : "bg-[#E5E5E5]"
               }`}
             />
-            <span className="text-xs text-gray-500 mt-1 block">
+            <span className="font-mono text-[10px] text-[#999999] mt-1 block">
               {p === "uploading" ? "Enviar" : p === "transcribing" ? "Transcrever" : "Avaliar"}
             </span>
           </div>
@@ -241,22 +244,19 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
 
   if (isCompleted) {
     return (
-      <div className="text-center py-12">
-        <div className="text-5xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold mb-2">Parabéns!</h2>
-        <p className="text-gray-600 mb-6">
+      <div className="flex flex-col items-center py-12 gap-4">
+        <h2 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+          Parabéns!
+        </h2>
+        <p className="font-sora text-sm text-[#5E5E5E]">
           Você completou a lição / You completed the lesson!
         </p>
-        <a
-          href="/lessons"
-          className="text-blue-600 hover:underline"
-          onClick={(e) => {
-            e.preventDefault();
-            window.history.back();
-          }}
+        <button
+          onClick={() => window.history.back()}
+          className="mt-4 px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
         >
-          Voltar às lições / Back to lessons
-        </a>
+          Voltar às lições
+        </button>
       </div>
     );
   }
@@ -264,12 +264,12 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
   if (!currentExchange) return null;
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm text-gray-500">{progress}</span>
-        <div className="w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+    <div className="flex flex-col gap-8">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-xs text-[#5E5E5E]">{progress}</span>
+        <div className="w-48 h-[4px] bg-[#E5E5E5]">
           <div
-            className="h-full bg-blue-500 transition-all"
+            className="h-full bg-[#DC2626]"
             style={{
               width: `${((currentIndex + 1) / exchanges.length) * 100}%`,
             }}
@@ -278,14 +278,16 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
       </div>
 
       {isAppTurn ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-          <div className="text-sm text-gray-500 mb-2">App</div>
-          <p className="text-xl font-medium mb-4">
+        <div className="border border-[#E5E5E5] p-8 flex flex-col gap-4">
+          <span className="font-mono text-[12px] font-medium tracking-[1px] text-[#999999]">
+            App
+          </span>
+          <p className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
             {currentExchange.english_text}
           </p>
 
           {showTranslation && (
-            <p className="text-gray-600 mb-4 italic">
+            <p className="font-sora text-sm text-[#5E5E5E]">
               {currentExchange.portuguese_translation}
             </p>
           )}
@@ -294,42 +296,45 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
             {currentExchange.audio_url && (
               <button
                 onClick={() => playAudio(currentExchange.audio_url!)}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                className="flex items-center gap-2 px-4 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
               >
-                🔊 Ouvir
+                <Volume2 size={16} />
+                Ouvir
               </button>
             )}
             <button
               onClick={() => setShowTranslation(!showTranslation)}
-              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+              className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
             >
               {showTranslation ? "Ocultar" : "Tradução"}
             </button>
             <button
               onClick={advance}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+              className="px-4 py-3 bg-[#22C55E] text-[#FAFAFA] font-sora text-[12px] font-medium"
             >
               Próximo →
             </button>
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-          <div className="text-sm text-gray-500 mb-2">Sua vez / Your turn</div>
-          <p className="text-xl font-medium mb-4">
+        <div className="border border-[#E5E5E5] p-8 flex flex-col gap-4">
+          <span className="font-mono text-[12px] font-medium tracking-[1px] text-[#999999]">
+            Sua vez / Your turn
+          </span>
+          <p className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
             {currentExchange.english_text}
           </p>
 
           {showTranslation && (
-            <p className="text-gray-600 mb-4 italic">
+            <p className="font-sora text-sm text-[#5E5E5E]">
               {currentExchange.portuguese_translation}
             </p>
           )}
 
-          <div className="flex gap-3 mb-4">
+          <div className="flex gap-3">
             <button
               onClick={() => setShowTranslation(!showTranslation)}
-              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+              className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
             >
               {showTranslation ? "Ocultar" : "Tradução"}
             </button>
@@ -337,13 +342,14 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
 
           <ProcessingStatus phase={processingPhase} />
 
-          <div className="flex gap-3 mb-4 items-center flex-wrap">
+          <div className="flex gap-3 items-center flex-wrap">
             {!isRecording && !audioBlob && (
               <button
                 onClick={startRecording}
-                className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 text-lg"
+                className="flex items-center gap-2 px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
               >
-                🎤 Gravar
+                <Mic size={16} />
+                Gravar
               </button>
             )}
 
@@ -351,12 +357,13 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
               <>
                 <button
                   onClick={stopRecording}
-                  className="px-6 py-3 bg-red-700 text-white rounded-lg hover:bg-red-800 text-lg"
+                  className="flex items-center gap-2 px-6 py-3 bg-[#991B1B] text-[#FAFAFA] font-sora text-[12px] font-medium"
                 >
-                  ⏹ Parar
+                  <Square size={16} />
+                  Parar
                 </button>
-                <span className="flex items-center gap-2 text-red-600 font-mono">
-                  <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="flex items-center gap-2 font-mono text-xs text-[#DC2626]">
+                  <span className="w-3 h-3 bg-[#DC2626] animate-pulse" />
                   {formatDuration(recordingDuration)}
                 </span>
               </>
@@ -366,27 +373,28 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
               <>
                 <button
                   onClick={submitAudio}
-                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                  className="px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
                 >
                   Enviar
                 </button>
                 <button
                   onClick={previewRecording}
-                  className="px-4 py-3 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  className="flex items-center gap-2 px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
                 >
-                  🔊 Ouvir gravação
+                  <Volume2 size={16} />
+                  Ouvir gravação
                 </button>
                 <button
                   onClick={() => {
                     setAudioBlob(null);
                     setRecordingDuration(0);
                   }}
-                  className="px-4 py-3 bg-gray-200 rounded-lg hover:bg-gray-300"
+                  className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
                 >
                   Regravar
                 </button>
                 {recordingDuration > 0 && (
-                  <span className="text-sm text-gray-500">
+                  <span className="font-mono text-xs text-[#999999]">
                     Duração: {formatDuration(recordingDuration)}
                   </span>
                 )}
@@ -396,41 +404,33 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
 
           {feedback && (
             <div
-              className={`p-4 rounded-lg mb-4 ${
+              className={`p-5 flex flex-col gap-2 ${
                 feedback.is_correct
-                  ? "bg-green-50 border border-green-200"
-                  : "bg-red-50 border border-red-200"
+                  ? "border-l-4 border-l-[#22C55E]"
+                  : "border-l-4 border-l-[#DC2626]"
               }`}
             >
-              <div className="text-lg mb-1">
-                {feedback.is_correct ? "✅" : "❌"}
-              </div>
-
               {feedback.transcription && (
-                <div className="mb-3">
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                <div>
+                  <span className="font-mono text-[10px] tracking-[1px] text-[#999999] uppercase">
                     O que você disse:
                   </span>
-                  <p className="text-gray-700 italic mt-1">
+                  <p className="font-sora text-sm text-[#000000] mt-1">
                     &ldquo;{feedback.transcription}&rdquo;
                   </p>
                 </div>
               )}
 
-              <p
-                className={
-                  feedback.is_correct ? "text-green-800" : "text-red-800"
-                }
-              >
+              <p className={`font-sora text-sm font-medium ${feedback.is_correct ? "text-[#22C55E]" : "text-[#DC2626]"}`}>
                 {feedback.feedback_pt}
               </p>
 
               {!feedback.is_correct && feedback.transcription && (
-                <div className="mt-3 pt-3 border-t border-red-200">
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                <div className="pt-3 border-t border-[#E5E5E5]">
+                  <span className="font-mono text-[10px] tracking-[1px] text-[#999999] uppercase">
                     O que era esperado:
                   </span>
-                  <p className="text-gray-700 mt-1">
+                  <p className="font-sora text-sm text-[#000000] mt-1">
                     &ldquo;{currentExchange.english_text}&rdquo;
                   </p>
                 </div>
@@ -448,10 +448,8 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
                     handleRetry();
                   }
                 }}
-                className={`px-6 py-3 rounded-lg text-white ${
-                  feedback.is_correct
-                    ? "bg-green-500 hover:bg-green-600"
-                    : "bg-orange-500 hover:bg-orange-600"
+                className={`px-6 py-3 text-[#FAFAFA] font-sora text-[12px] font-medium ${
+                  feedback.is_correct ? "bg-[#22C55E]" : "bg-[#DC2626]"
                 }`}
               >
                 {feedback.is_correct ? "Próximo →" : "Tentar novamente"}
@@ -459,7 +457,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
               {!feedback.is_correct && retryCount > 0 && (
                 <button
                   onClick={advance}
-                  className="px-4 py-3 bg-gray-200 rounded-lg hover:bg-gray-300"
+                  className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
                 >
                   Pular →
                 </button>

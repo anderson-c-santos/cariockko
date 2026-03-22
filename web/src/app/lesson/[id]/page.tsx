@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api";
 import { LessonPlayer } from "@/components/LessonPlayer";
 import Link from "next/link";
+import { Sidebar } from "@/components/Sidebar";
+import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -39,33 +41,48 @@ export default async function LessonPage({ params }: PageProps) {
 
   if (error || !lesson) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-12">
-        <Link href="/" className="text-blue-600 hover:underline mb-6 block">
-          ← Voltar / Back
-        </Link>
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-lg">Lição não encontrada</p>
-        </div>
-      </main>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="flex-1 px-16 py-12">
+          <Link
+            href="/"
+            className="flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] text-[12px] font-sora font-medium text-black w-fit mb-6"
+          >
+            <ArrowLeft size={16} />
+            Voltar
+          </Link>
+          <div className="flex flex-col items-center py-12 gap-2">
+            <p className="font-sora text-lg text-[#5E5E5E]">
+              Lição não encontrada
+            </p>
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8">
-      <Link
-        href={`/lessons/${lesson.level}`}
-        className="text-blue-600 hover:underline mb-4 block"
-      >
-        ← Voltar para {lesson.level}
-      </Link>
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <main className="flex-1 px-16 py-12 flex flex-col gap-8">
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/lessons/${lesson.level}`}
+            className="flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] text-[12px] font-sora font-medium text-black"
+          >
+            <ArrowLeft size={16} />
+            Voltar para {lesson.level}
+          </Link>
+          <h1 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+            {lesson.title}
+          </h1>
+        </div>
 
-      <h1 className="text-2xl font-bold mb-1">{lesson.title}</h1>
-      <p className="text-gray-500 mb-6 capitalize">{lesson.level}</p>
-
-      <LessonPlayer
-        lessonId={lesson.id}
-        exchanges={lesson.exchanges ?? []}
-      />
-    </main>
+        <LessonPlayer
+          lessonId={lesson.id}
+          exchanges={lesson.exchanges ?? []}
+        />
+      </main>
+    </div>
   );
 }
