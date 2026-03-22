@@ -1,0 +1,10 @@
+{
+  "name": "cariockko",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "docker compose up --build",
+    "seed": "docker compose run --rm api npm run seed-lessons",
+    "build": "docker compose build"
+  }
+}
