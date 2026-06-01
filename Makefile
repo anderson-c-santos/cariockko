@@ -18,11 +18,11 @@ stop: ## Stop all services (keep volumes)
 	@echo "$(YELLOW)Stopping services...$(NC)"
 	docker compose down
 
-destroy: ## Stop all services and remove volumes (deletes all data)
-	@echo "$(RED)WARNING: This will delete all data (database, files).$(NC)"
+destroy: ## Stop all services, remove volumes and images (deletes all data)
+	@echo "$(RED)WARNING: This will delete all data (database, files) and images.$(NC)"
 	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	docker compose down -v
-	@echo "$(RED)Volumes removed.$(NC)"
+	docker compose down -v --rmi all
+	@echo "$(RED)Volumes and images removed.$(NC)"
 
 restart: ## Restart all services
 	@echo "$(YELLOW)Restarting services...$(NC)"
