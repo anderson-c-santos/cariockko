@@ -99,6 +99,34 @@ make status
 curl http://localhost:3001/health/ready
 ```
 
+### Mobile / Phone Access (Dev)
+
+Browsers require a **secure context** (HTTPS, or `localhost`) for
+`getUserMedia` to work. Plain HTTP on a LAN IP is silently blocked — so
+testing the microphone from a phone needs a public HTTPS URL.
+
+The simplest way is `make tunnel`, which uses
+[localhost.run](https://localhost.run/) — a clientless SSH-based tunnel
+that wraps `http://localhost:3000` in a public `https://*.lhr.life` URL.
+No certs, no LAN IP, no firewall fiddling.
+
+```bash
+# 1. Start the stack (in one terminal)
+make start
+
+# 2. Open a tunnel (in another terminal)
+make tunnel
+# → Read the printed `https://<id>.lhr.life` URL
+# → Open it on your phone — mic works because it's a real HTTPS origin
+```
+
+`make tunnel` runs `ssh -R 80:localhost:3000 localhost.run`. Press `Ctrl+C`
+to close the tunnel; the local stack keeps running.
+
+Plain `make start` (everything in Docker, HTTP on `localhost:3000`) is the
+right choice when testing from the same machine — microphone works there
+because `localhost` counts as a secure context.
+
 ## Make Commands
 
 | Command | Description |
@@ -109,6 +137,9 @@ curl http://localhost:3001/health/ready
 | `make restart` | Restart all services |
 | `make logs` | Follow logs from all services |
 | `make status` | Show status of all services |
+| `make seed-status` | Show current lesson seeding progress |
+| `make wait-ready` | Poll `/health/ready` until all lessons are seeded |
+| `make tunnel` | Expose the running stack over public HTTPS via localhost.run (for phone/mic testing) |
 | `make help` | Show available commands |
 
 ## Architecture

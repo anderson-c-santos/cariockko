@@ -1,4 +1,4 @@
-.PHONY: help start stop destroy restart logs status wait-ready seed-status
+.PHONY: help start stop destroy restart logs status wait-ready seed-status tunnel
 
 .DEFAULT_GOAL := help
 
@@ -9,15 +9,22 @@ CYAN   := \033[0;36m
 NC     := \033[0m
 
 API_URL := http://localhost:3001
+WEB_URL := http://localhost:3000
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-14s$(NC) %s\n", $$1, $$2}'
 
-start: ## Start all services (detached, with builds) then wait for readiness
+start: ## Start all services in Docker over HTTP (run 'make tunnel' alongside for phone access)
 	@echo "$(GREEN)Starting services...$(NC)"
 	docker compose up -d --build
-	@echo "$(CYAN)Services are up. Waiting for lesson seeding to complete...$(NC)"
+	@echo "$(CYAN)Services are up. Lessons seed in the background — the app$(NC)"
+	@echo "$(CYAN)is already usable at $(WEB_URL) (API and audio are$(NC)"
+	@echo "$(CYAN)proxied same-origin via Next.js). Waiting for full readiness...$(NC)"
 	@$(MAKE) wait-ready
+	@echo "$(GREEN)Open $(WEB_URL) to start a lesson.$(NC)"
+	@echo "$(CYAN)For phone/microphone testing, run 'make tunnel' in another$(NC)"
+	@echo "$(CYAN)terminal — it exposes $(WEB_URL) over public HTTPS via$(NC)"
+	@echo "$(CYAN)localhost.run (no certs, no LAN setup).$(NC)"
 
 stop: ## Stop all services (keep volumes)
 	@echo "$(YELLOW)Stopping services...$(NC)"
@@ -77,3 +84,8 @@ wait-ready: ## Poll /health/ready until all lessons are seeded (use after start)
 		sleep 10; \
 		elapsed=$$((elapsed + 10)); \
 	done
+
+tunnel: ## Expose the running stack over public HTTPS via localhost.run (Ctrl+C to stop)
+	@echo "$(CYAN)Opening SSH tunnel to localhost.run...$(NC)"
+	@echo "$(CYAN)Watch for the 'tunneled with tls termination' line — that's your phone URL.$(NC)"
+	ssh -R 80:localhost:3000 -o ServerAliveInterval=30 -o StrictHostKeyChecking=accept-new localhost.run
