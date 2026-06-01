@@ -12,37 +12,69 @@ export function Sidebar() {
     return pathname.startsWith(path);
   };
 
+  const navItems = [
+    {
+      href: "/",
+      icon: LayoutGrid,
+      label: "Início",
+      active: isActive("/"),
+    },
+    {
+      href: "/lessons/beginner",
+      icon: BookOpen,
+      label: "Lições",
+      active: isActive("/lessons") || isActive("/lesson"),
+    },
+    {
+      href: "#",
+      icon: Settings,
+      label: "Ajustes",
+      active: false,
+    },
+  ];
+
   return (
-    <aside className="w-16 bg-black flex flex-col items-center py-8 gap-8 shrink-0 min-h-screen">
-      <Link href="/" className="text-[#FAFAFA] font-sora font-bold text-base">
-        C
-      </Link>
-      <nav className="flex flex-col gap-1">
-        <Link
-          href="/"
-          className={`p-1.5 flex items-center justify-center ${
-            isActive("/") ? "text-[#FAFAFA]" : "text-[#666666] hover:text-[#FAFAFA]"
-          }`}
-        >
-          <LayoutGrid size={18} />
+    <>
+      {/* Desktop: vertical left rail (md and up) */}
+      <aside className="hidden md:flex w-16 bg-black flex-col items-center py-8 gap-8 shrink-0 min-h-screen">
+        <Link href="/" className="text-[#FAFAFA] font-sora font-bold text-base">
+          C
         </Link>
-        <Link
-          href="/lessons/beginner"
-          className={`p-1.5 flex items-center justify-center ${
-            isActive("/lessons") || isActive("/lesson")
-              ? "text-[#FAFAFA]"
-              : "text-[#666666] hover:text-[#FAFAFA]"
-          }`}
-        >
-          <BookOpen size={18} />
-        </Link>
-        <Link
-          href="#"
-          className="p-1.5 flex items-center justify-center text-[#666666] hover:text-[#FAFAFA]"
-        >
-          <Settings size={18} />
-        </Link>
+        <nav className="flex flex-col gap-1">
+          {navItems.map(({ href, icon: Icon, label, active }) => (
+            <Link
+              key={label}
+              href={href}
+              aria-label={label}
+              className={`p-1.5 flex items-center justify-center ${
+                active ? "text-[#FAFAFA]" : "text-[#666666] hover:text-[#FAFAFA]"
+              }`}
+            >
+              <Icon size={18} />
+            </Link>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Mobile: fixed bottom tab bar (below md) */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-black border-t border-[#222] flex justify-around items-stretch pb-safe"
+        aria-label="Navegação principal"
+      >
+        {navItems.map(({ href, icon: Icon, label, active }) => (
+          <Link
+            key={label}
+            href={href}
+            aria-label={label}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[56px] ${
+              active ? "text-[#FAFAFA]" : "text-[#666666]"
+            }`}
+          >
+            <Icon size={20} />
+            <span className="font-mono text-[10px] tracking-[1px]">{label}</span>
+          </Link>
+        ))}
       </nav>
-    </aside>
+    </>
   );
 }

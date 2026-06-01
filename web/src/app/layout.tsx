@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,13 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Cariockko",
   description: "Learn English through interactive conversations",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#FAFAFA",
 };
 
 export default function RootLayout({

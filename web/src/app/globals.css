@@ -22,8 +22,21 @@
   --error: #DC2626;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   font-family: "Sora", sans-serif;
   background-color: #FAFAFA;
   color: #000000;
+}
+
+/* Safe-area helpers for iOS notch / home indicator */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
 }

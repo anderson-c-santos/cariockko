@@ -41,12 +41,12 @@ export default async function LessonPage({ params }: PageProps) {
 
   if (error || !lesson) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen flex-col md:flex-row">
         <Sidebar />
-        <main className="flex-1 px-16 py-12">
+        <main className="flex-1 px-4 py-6 md:px-16 md:py-12 pb-24 md:pb-12">
           <Link
             href="/"
-            className="flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] text-[12px] font-sora font-medium text-black w-fit mb-6"
+            className="flex items-center gap-2 px-3 py-2 min-h-[40px] border border-[#E5E5E5] text-[12px] font-sora font-medium text-black w-fit mb-6"
           >
             <ArrowLeft size={16} />
             Voltar
@@ -62,18 +62,19 @@ export default async function LessonPage({ params }: PageProps) {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
-      <main className="flex-1 px-16 py-12 flex flex-col gap-8">
-        <div className="flex items-center gap-4">
+      <main className="flex-1 px-4 py-6 md:px-16 md:py-12 pb-24 md:pb-12 flex flex-col gap-6 md:gap-8">
+        <div className="flex items-center gap-3 md:gap-4 flex-wrap">
           <Link
             href={`/lessons/${lesson.level}`}
-            className="flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] text-[12px] font-sora font-medium text-black"
+            className="flex items-center gap-2 px-3 py-2 min-h-[40px] border border-[#E5E5E5] text-[12px] font-sora font-medium text-black"
           >
             <ArrowLeft size={16} />
-            Voltar para {lesson.level}
+            <span className="hidden sm:inline">Voltar para {lesson.level}</span>
+            <span className="sm:hidden">Voltar</span>
           </Link>
-          <h1 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+          <h1 className="font-sora text-xl md:text-2xl font-semibold tracking-[-1px] text-black break-words flex-1 min-w-0">
             {lesson.title}
           </h1>
         </div>
