@@ -104,9 +104,10 @@ export async function generateAudio(
   filename: string
 ): Promise<string> {
   const speech = await openai.audio.speech.create({
-    model: process.env.OPENAI_MODEL_TTS ?? "tts-1",
-    voice: "nova",
+    model: "gpt-4o-mini-tts",
+    voice: "marin",
     input: text,
+    instructions: "Speak in a calm and friendly tone.",
   });
 
   const buffer = Buffer.from(await speech.arrayBuffer());

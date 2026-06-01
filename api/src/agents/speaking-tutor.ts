@@ -98,7 +98,7 @@ async function transcribeWithRetry(buffer: Buffer, maxRetries = 2): Promise<stri
       const file = await toFile(buffer, "audio.webm", { type: "audio/webm" });
       const transcription = await openai.audio.transcriptions.create({
         file,
-        model: process.env.OPENAI_MODEL_TRANSCRIPTION ?? "whisper-1",
+        model: "gpt-4o-mini-transcribe",
       });
       return transcription.text;
     } catch (err) {
