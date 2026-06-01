@@ -332,6 +332,15 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
           )}
 
           <div className="flex gap-3">
+            {currentExchange.audio_url && (
+              <button
+                onClick={() => playAudio(currentExchange.audio_url!)}
+                className="flex items-center gap-2 px-4 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+              >
+                <Volume2 size={16} />
+                Ouvir referência
+              </button>
+            )}
             <button
               onClick={() => setShowTranslation(!showTranslation)}
               className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"

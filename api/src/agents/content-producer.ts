@@ -104,9 +104,10 @@ export async function generateAudio(
   filename: string
 ): Promise<string> {
   const speech = await openai.audio.speech.create({
-    model: process.env.OPENAI_MODEL_TTS ?? "tts-1",
-    voice: "nova",
+    model: "gpt-4o-mini-tts",
+    voice: "marin",
     input: text,
+    instructions: "Speak in a calm and friendly tone.",
   });
 
   const buffer = Buffer.from(await speech.arrayBuffer());
@@ -160,13 +161,11 @@ export async function seedLessons() {
       for (const exchange of exchanges) {
         let audioUrl: string | null = null;
 
-        if (exchange.speaker === "app") {
-          console.log(`  Generating audio for exchange ${exchange.order_index}...`);
-          audioUrl = await generateAudio(
-            exchange.english_text,
-            `${lesson.id}_${exchange.order_index}.mp3`
-          );
-        }
+        console.log(`  Generating audio for exchange ${exchange.order_index}...`);
+        audioUrl = await generateAudio(
+          exchange.english_text,
+          `${lesson.id}_${exchange.order_index}.mp3`
+        );
 
         await pool.query(
           `INSERT INTO dialogue_exchanges (lesson_id, order_index, speaker, english_text, portuguese_translation, audio_url)
