@@ -38,44 +38,46 @@ Each lesson is a scripted dialogue between two characters (e.g., Aimee and Todd)
 
 Cariockko runs entirely locally via Docker. All infrastructure components are containerized and orchestrated with `docker-compose`. A single command spins up the full stack.
 
-> **Note**: While the application runs locally, AI capabilities (GPT-5 mini, Whisper, TTS) require an internet connection and a valid OpenAI API key.
+> **Note**: While the application runs locally, AI capabilities (GPT-4o-mini, GPT-4o-mini-transcribe, GPT-4o-mini-tts) require an internet connection and a valid OpenAI API key.
 
 ### Infrastructure (Dockerized)
 
 | Component | Technology | Container |
 |-----------|-----------|-----------|
 | Frontend | Next.js (React) | `cariockko-web` |
-| Backend / API | Node.js (LangGraph agents) | `cariockko-api` |
-| Database + Auth | Self-hosted Supabase | `supabase` (multi-service) |
+| Backend / API | Node.js (Express + LangChain) | `cariockko-api` |
+| Database | PostgreSQL | `db` |
+| Object Storage | MinIO (S3-compatible) | `minio` |
 
 ### Running Locally
 
 ```bash
 # Clone and start the entire stack
-docker-compose up
+make start
 
 # Or seed lessons first, then start
-docker-compose run --rm api seed-lessons
-docker-compose up
+docker compose run --rm api npm run seed-lessons
+make start
 ```
 
 ### AI Models (OpenAI API)
 
 | Capability | Model |
 |-----------|-------|
-| Text generation & analysis | `gpt-5-mini` |
-| Speech-to-text transcription | `whisper-1` |
-| Text-to-speech (audio clips) | OpenAI TTS |
+| Text generation & analysis | `gpt-4o-mini` |
+| Speech-to-text transcription | `gpt-4o-mini-transcribe` |
+| Text-to-speech (audio clips) | `gpt-4o-mini-tts` |
 
 ### Agents
 
-1. **Content Producer Agent** — Runs as a one-time seed script (via `docker-compose run api seed-lessons`). Generates structured lesson conversations (up to 10 message-exchanges each) across 3 levels, 3 lessons per level (9 lessons total). Output is stored in the Supabase database.
-2. **Speaking Tutor Agent** — Runs on-demand when a student submits a recording. Receives the full lesson context, the expected line, and the student's audio. Transcribes the audio via `whisper-1`, compares against the expected content, and returns structured feedback in Brazilian Portuguese.
+1. **Content Producer Agent** — Runs as a one-time seed script (via `docker-compose run api seed-lessons`). Generates structured lesson conversations (up to 10 message-exchanges each) across 3 levels, 20 lessons per level (60 lessons total). Output is stored in the database.
+2. **Speaking Tutor Agent** — Runs on-demand when a student submits a recording. Receives the full lesson context, the expected line, and the student's audio. Transcribes the audio via `gpt-4o-mini-transcribe`, compares against the expected content, and returns structured feedback in Brazilian Portuguese.
 
 ## Features
 
-1. **Three difficulty levels** — Lessons are organized into Beginner, Intermediate, and Advanced. Each level contains at least 3 lessons.
-2. **AI Content Generation** — A Content Producer Agent (LangGraph) seeds the database with lesson conversations before the app's first use. Each lesson contains up to 10 dialogue exchanges.
-3. **Speaking Analysis & Feedback** — A Speaking Tutor Agent (LangGraph) analyzes student audio recordings, compares them to the expected dialogue, and returns summarized feedback in Brazilian Portuguese. Incorrect responses block progression until retried successfully.
-4. **AI-Generated Audio** — All listening audio clips (the app-character lines) are generated via OpenAI text-to-speech.
+1. **Three difficulty levels** — Lessons are organized into Beginner, Intermediate, and Advanced. Each level contains 20 lessons (60 total).
+2. **AI Content Generation** — A Content Producer Agent seeds the database with lesson conversations before the app's first use. Each lesson contains up to 10 dialogue exchanges.
+3. **Speaking Analysis & Feedback** — A Speaking Tutor Agent analyzes student audio recordings, compares them to the expected dialogue, and returns summarized feedback in Brazilian Portuguese. Incorrect responses block progression until retried successfully.
+4. **AI-Generated Audio** — All listening audio clips (both app and student character lines) are generated via OpenAI text-to-speech (gpt-4o-mini-tts, voice: marin).
 5. **Translation Support** — Students can view a Brazilian Portuguese translation of any dialogue line on demand.
+6. **Reference Playback** — Students can listen to AI-generated audio for any exchange to hear correct pronunciation.
