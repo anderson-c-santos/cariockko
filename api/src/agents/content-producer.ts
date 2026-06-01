@@ -17,16 +17,67 @@ const LESSON_THEMES: Record<string, string[]> = {
     "Meeting someone new and introducing yourself",
     "Ordering food at a restaurant",
     "Asking for directions in a city",
+    "Shopping for clothes at a store",
+    "Introducing your family members",
+    "Talking about the weather",
+    "Using public transport",
+    "Saying phone numbers and dates",
+    "Telling the time",
+    "Describing your home",
+    "Counting and buying at a market",
+    "Apologizing and excusing yourself",
+    "Talking about colours and clothes",
+    "Days of the week and the calendar",
+    "Visiting the doctor with basic symptoms",
+    "Talking about school and studying",
+    "Describing a simple hobby",
+    "Booking a hotel room",
+    "At the airport check-in",
+    "Asking where the bathroom is",
   ],
   intermediate: [
     "Making plans for the weekend with a friend",
     "Talking about your job and daily routine",
     "Discussing a movie you recently watched",
+    "Shopping in a mall and comparing prices",
+    "Talking about your favourite sport",
+    "Renting an apartment",
+    "Planning a birthday celebration",
+    "Following a recipe while cooking",
+    "Asking a colleague for help at work",
+    "Sharing travel experiences",
+    "Discussing health and exercise routines",
+    "Telling stories about your weekend",
+    "Booking a dentist appointment",
+    "Chatting about local news",
+    "Talking about music taste",
+    "Dealing with car trouble at a mechanic",
+    "Opening a bank account",
+    "Discussing social media habits",
+    "Describing your neighbourhood",
+    "Complaining politely about a service",
   ],
   advanced: [
     "Debating the pros and cons of remote work",
     "Discussing climate change and possible solutions",
     "Sharing opinions about technology and society",
+    "Debating immigration policy",
+    "Analysing a news article",
+    "Discussing geopolitics and international relations",
+    "Mental health and modern life",
+    "The future of artificial intelligence",
+    "Urban planning and smart cities",
+    "Comparing healthcare systems",
+    "Social inequality and economic mobility",
+    "The role of media and journalism today",
+    "Philosophy of happiness and well-being",
+    "Sustainable fashion and ethical consumption",
+    "Work-life balance in the digital age",
+    "Ethics of social media platforms",
+    "Impact of globalisation on local cultures",
+    "Gender equality in the workplace",
+    "The housing crisis in major cities",
+    "Cultural identity in a diaspora community",
   ],
 };
 
@@ -117,7 +168,8 @@ export async function generateAudio(
 }
 
 const LEVELS = ["beginner", "intermediate", "advanced"] as const;
-export const EXPECTED_LESSON_COUNT = LEVELS.length * 3;
+export const LESSONS_PER_LEVEL = 20;
+export const EXPECTED_LESSON_COUNT = LEVELS.length * LESSONS_PER_LEVEL;
 
 export async function getLessonCount(): Promise<number> {
   const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM lessons");
@@ -137,13 +189,13 @@ export async function seedLessons() {
     const existingCount = existing.length;
     const themes = LESSON_THEMES[level];
 
-    if (existingCount >= themes.length) {
+    if (existingCount >= LESSONS_PER_LEVEL) {
       console.log(`${level}: ${existingCount} lessons already exist. Skipping.`);
       continue;
     }
 
-    for (let i = existingCount; i < themes.length; i++) {
-      console.log(`Generating ${level} lesson ${i + 1}/${themes.length}...`);
+    for (let i = existingCount; i < LESSONS_PER_LEVEL; i++) {
+      console.log(`Generating ${level} lesson ${i + 1}/${LESSONS_PER_LEVEL}...`);
 
       const { title, exchanges } = await generateLessonContent(level, i);
 
