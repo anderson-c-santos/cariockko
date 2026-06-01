@@ -38,8 +38,8 @@ async function seedIfNeeded() {
     }
   }
 
-  throw new Error(
-    `Failed to seed all lessons after ${maxRetries} attempts`
+  console.error(
+    `Failed to seed all lessons after ${maxRetries} attempts. The API is still running but may serve incomplete data.`
   );
 }
 
@@ -49,8 +49,16 @@ async function startServer() {
 }
 
 async function main() {
-  await seedIfNeeded();
+  // Start the HTTP server first so healthcheck probes and readiness endpoints
+  // respond immediately. Seeding then runs in the background.
   await startServer();
+
+  // Fire-and-forget: seeding runs asynchronously after the server is up.
+  // /health/ready will return 503 until seeding finishes, but /health/live
+  // will return 200 as soon as the server is up.
+  seedIfNeeded().catch((err) => {
+    console.error("Background seed error:", err);
+  });
 }
 
 main().catch((err) => {

@@ -18,6 +18,16 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Liveness probe: the server is up and accepting connections.
+// Used by Docker's healthcheck so the container is marked healthy as soon
+// as the HTTP server starts, even while seeding is still running in the background.
+app.get("/health/live", (_req, res) => {
+  res.json({ status: "live" });
+});
+
+// Readiness probe: seeding is complete and the API can serve lesson data.
+// Returns 503 while seeding is in progress. Poll this endpoint to wait for
+// the system to be fully ready (e.g. from `make wait-ready`).
 app.get("/health/ready", async (_req, res) => {
   try {
     const count = await getLessonCount();

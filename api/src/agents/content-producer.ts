@@ -171,12 +171,102 @@ const LEVELS = ["beginner", "intermediate", "advanced"] as const;
 export const LESSONS_PER_LEVEL = 20;
 export const EXPECTED_LESSON_COUNT = LEVELS.length * LESSONS_PER_LEVEL;
 
+// Maximum number of lessons generated concurrently per level.
+// Keeps OpenAI rate limits and DB connection usage manageable.
+const SEED_CONCURRENCY = parseInt(process.env.SEED_CONCURRENCY ?? "3", 10);
+
 export async function getLessonCount(): Promise<number> {
   const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM lessons");
   return rows[0]?.count ?? 0;
 }
 
+/**
+ * Generates a single lesson (content + audio for all exchanges) and persists
+ * it to the database. Isolated so it can run in parallel with other lessons.
+ */
+async function seedSingleLesson(level: string, themeIndex: number): Promise<void> {
+  const lessonLabel = `${level} lesson ${themeIndex + 1}/${LESSONS_PER_LEVEL}`;
+  console.log(`[seed] Generating ${lessonLabel}...`);
+
+  const { title, exchanges } = await generateLessonContent(level, themeIndex);
+
+  const { rows: lessonRows } = await pool.query(
+    "INSERT INTO lessons (title, level) VALUES ($1, $2) RETURNING *",
+    [title, level]
+  );
+
+  const lesson = lessonRows[0];
+  if (!lesson) {
+    throw new Error(`Failed to insert lesson row for ${lessonLabel}`);
+  }
+
+  // Generate and upload audio for all exchanges in the lesson in parallel.
+  await Promise.all(
+    exchanges.map(async (exchange) => {
+      const audioUrl = await generateAudio(
+        exchange.english_text,
+        `${lesson.id}_${exchange.order_index}.mp3`
+      );
+
+      await pool.query(
+        `INSERT INTO dialogue_exchanges (lesson_id, order_index, speaker, english_text, portuguese_translation, audio_url)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          lesson.id,
+          exchange.order_index,
+          exchange.speaker,
+          exchange.english_text,
+          exchange.portuguese_translation,
+          audioUrl,
+        ]
+      );
+    })
+  );
+
+  console.log(`[seed] Created: "${title}" (${lessonLabel})`);
+}
+
+/**
+ * Simple semaphore to limit concurrency without adding extra dependencies.
+ */
+function createSemaphore(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  function release() {
+    active--;
+    if (queue.length > 0) {
+      active++;
+      queue.shift()!();
+    }
+  }
+
+  return async function acquire<T>(fn: () => Promise<T>): Promise<T> {
+    if (active < limit) {
+      active++;
+      try {
+        return await fn();
+      } finally {
+        release();
+      }
+    }
+    return new Promise<T>((resolve, reject) => {
+      queue.push(async () => {
+        try {
+          resolve(await fn());
+        } catch (err) {
+          reject(err);
+        } finally {
+          release();
+        }
+      });
+    });
+  };
+}
+
 export async function seedLessons() {
+  // Clean up any lessons that were partially inserted (lesson row exists but
+  // audio generation failed before exchanges were written).
   await pool.query(
     `DELETE FROM lessons WHERE id NOT IN (SELECT DISTINCT lesson_id FROM dialogue_exchanges)`
   );
@@ -187,55 +277,44 @@ export async function seedLessons() {
       [level]
     );
     const existingCount = existing.length;
-    const themes = LESSON_THEMES[level];
 
     if (existingCount >= LESSONS_PER_LEVEL) {
-      console.log(`${level}: ${existingCount} lessons already exist. Skipping.`);
+      console.log(`[seed] ${level}: ${existingCount} lessons already exist. Skipping.`);
       continue;
     }
 
-    for (let i = existingCount; i < LESSONS_PER_LEVEL; i++) {
-      console.log(`Generating ${level} lesson ${i + 1}/${LESSONS_PER_LEVEL}...`);
+    const toGenerate = Array.from(
+      { length: LESSONS_PER_LEVEL - existingCount },
+      (_, i) => existingCount + i
+    );
 
-      const { title, exchanges } = await generateLessonContent(level, i);
+    console.log(
+      `[seed] ${level}: generating ${toGenerate.length} lessons with concurrency=${SEED_CONCURRENCY}...`
+    );
 
-      const { rows: lessonRows } = await pool.query(
-        "INSERT INTO lessons (title, level) VALUES ($1, $2) RETURNING *",
-        [title, level]
+    const acquire = createSemaphore(SEED_CONCURRENCY);
+
+    const results = await Promise.allSettled(
+      toGenerate.map((themeIndex) =>
+        acquire(() => seedSingleLesson(level, themeIndex))
+      )
+    );
+
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.warn(
+        `[seed] ${level}: ${failures.length}/${toGenerate.length} lessons failed:`
       );
-
-      const lesson = lessonRows[0];
-      if (!lesson) {
-        console.error(`Failed to insert lesson`);
-        continue;
-      }
-
-      for (const exchange of exchanges) {
-        let audioUrl: string | null = null;
-
-        console.log(`  Generating audio for exchange ${exchange.order_index}...`);
-        audioUrl = await generateAudio(
-          exchange.english_text,
-          `${lesson.id}_${exchange.order_index}.mp3`
-        );
-
-        await pool.query(
-          `INSERT INTO dialogue_exchanges (lesson_id, order_index, speaker, english_text, portuguese_translation, audio_url)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            lesson.id,
-            exchange.order_index,
-            exchange.speaker,
-            exchange.english_text,
-            exchange.portuguese_translation,
-            audioUrl,
-          ]
-        );
-      }
-
-      console.log(`  Created: "${title}"`);
+      failures.forEach((r) => {
+        if (r.status === "rejected") {
+          console.warn(`  - ${r.reason instanceof Error ? r.reason.message : r.reason}`);
+        }
+      });
     }
+
+    const successes = results.filter((r) => r.status === "fulfilled").length;
+    console.log(`[seed] ${level}: ${successes}/${toGenerate.length} lessons generated.`);
   }
 
-  console.log("\nSeeding complete!");
+  console.log("[seed] Seeding complete!");
 }
