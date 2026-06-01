@@ -161,13 +161,11 @@ export async function seedLessons() {
       for (const exchange of exchanges) {
         let audioUrl: string | null = null;
 
-        if (exchange.speaker === "app") {
-          console.log(`  Generating audio for exchange ${exchange.order_index}...`);
-          audioUrl = await generateAudio(
-            exchange.english_text,
-            `${lesson.id}_${exchange.order_index}.mp3`
-          );
-        }
+        console.log(`  Generating audio for exchange ${exchange.order_index}...`);
+        audioUrl = await generateAudio(
+          exchange.english_text,
+          `${lesson.id}_${exchange.order_index}.mp3`
+        );
 
         await pool.query(
           `INSERT INTO dialogue_exchanges (lesson_id, order_index, speaker, english_text, portuguese_translation, audio_url)
