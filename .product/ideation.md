@@ -1,6 +1,6 @@
 ## Vision
 
-Cariocko is an open-source English language-learning app designed specifically for the Brazilian community. Its focus is to give Brazilians a safe, judgment-free environment to practice listening and speaking English through interactive, AI-powered conversation exercises.
+Cariockko is an open-source English language-learning app designed specifically for the Brazilian community. Its focus is to give Brazilians a safe, judgment-free environment to practice listening and speaking English through interactive, AI-powered conversation exercises.
 
 ## Problem
 
@@ -11,7 +11,7 @@ Cariocko is an open-source English language-learning app designed specifically f
 
 ## Solution
 
-Cariocko helps Brazilian students improve their English **listening** and **speaking** skills through role-play conversations. It takes inspiration from sites like [Elllo](https://www.elllo.org/grammar/A1-index.htm), but with a key difference: the student takes an active role by impersonating a character in each lesson.
+Cariockko helps Brazilian students improve their English **listening** and **speaking** skills through role-play conversations. It takes inspiration from sites like [Elllo](https://www.elllo.org/grammar/A1-index.htm), but with a key difference: the student takes an active role by impersonating a character in each lesson.
 
 ### Lesson Flow
 
@@ -36,7 +36,7 @@ Each lesson is a scripted dialogue between two characters (e.g., Aimee and Todd)
 
 ### Overview
 
-Cariocko runs entirely locally via Docker. All infrastructure components are containerized and orchestrated with `docker-compose`. A single command spins up the full stack.
+Cariockko runs entirely locally via Docker. All infrastructure components are containerized and orchestrated with `docker-compose`. A single command spins up the full stack.
 
 > **Note**: While the application runs locally, AI capabilities (GPT-5 mini, Whisper, TTS) require an internet connection and a valid OpenAI API key.
 

@@ -36,5 +36,5 @@ app.use("/api/speaking-tutor", upload.single("audio"), speakingTutorRouter);
 app.use("/api/progress", progressRouter);
 
 app.listen(port, () => {
-  console.log(`Cariocko API running on port ${port}`);
+  console.log(`Cariockko API running on port ${port}`);
 });
