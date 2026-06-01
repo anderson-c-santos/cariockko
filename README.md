@@ -1,17 +1,17 @@
-# Cariocko
+# Cariockko
 
 **Learn English by talking** — An open-source English language-learning app designed for the Brazilian community.
 
-Cariocko gives you a safe, judgment-free environment to practice listening and speaking English through interactive, AI-powered role-play conversations.
+Cariockko gives you a safe, judgment-free environment to practice listening and speaking English through interactive, AI-powered role-play conversations.
 
-## Why Cariocko?
+## Why Cariockko?
 
 - Only ~5% of Brazilians have any knowledge of English, with less than 1–5% considered fluent
 - Many face stigma and judgment from peers while learning
 - International platforms assume basic English knowledge that most Brazilians don't have
 - Tailored courses are often prohibitively expensive
 
-Cariocko solves this by providing an accessible, private space where students practice at their own level with instant AI feedback in Brazilian Portuguese.
+Cariockko solves this by providing an accessible, private space where students practice at their own level with instant AI feedback in Brazilian Portuguese.
 
 ## How It Works
 
