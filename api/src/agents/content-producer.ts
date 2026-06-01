@@ -47,7 +47,7 @@ export async function generateLessonContent(
   const theme = themes[themeIndex] ?? themes[0];
 
   const llm = new ChatOpenAI({
-    model: "gpt-4o-mini",
+    model: process.env.OPENAI_MODEL_CHAT ?? "gpt-4o-mini",
     temperature: 0.8,
   });
 
@@ -104,7 +104,7 @@ export async function generateAudio(
   filename: string
 ): Promise<string> {
   const speech = await openai.audio.speech.create({
-    model: "tts-1",
+    model: process.env.OPENAI_MODEL_TTS ?? "tts-1",
     voice: "nova",
     input: text,
   });
