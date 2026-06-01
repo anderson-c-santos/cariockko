@@ -22,10 +22,23 @@ speakingTutorRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "Arquivo de áudio muito grande. Máximo 10MB." });
     }
 
-    const allowedTypes = ["audio/webm", "audio/mp3", "audio/mpeg", "audio/wav", "audio/ogg"];
-    if (!allowedTypes.includes(file.mimetype)) {
+    // Allow common browser-recorded mimetypes. iOS Safari produces
+    // audio/mp4 (m4a); Chromium/Firefox produce audio/webm. Some browsers
+    // append codec parameters, so match by prefix as well.
+    const allowedTypes = [
+      "audio/webm",
+      "audio/mp3",
+      "audio/mpeg",
+      "audio/wav",
+      "audio/ogg",
+      "audio/mp4",
+      "audio/x-m4a",
+      "audio/aac",
+    ];
+    const baseType = file.mimetype.split(";")[0]!.trim().toLowerCase();
+    if (!allowedTypes.includes(baseType)) {
       console.error(`[speaking-tutor-route] Unsupported mimetype: ${file.mimetype}`);
-      return res.status(400).json({ error: "Tipo de arquivo não suportado. Use webm, mp3, wav ou ogg." });
+      return res.status(400).json({ error: "Tipo de arquivo não suportado. Use webm, mp4, mp3, wav ou ogg." });
     }
 
     const { rows: exchanges } = await pool.query(
@@ -37,6 +50,8 @@ speakingTutorRouter.post("/", async (req, res) => {
 
     const result = await speakingTutorAgent({
       audioBuffer: file.buffer,
+      audioMimeType: file.mimetype,
+      audioFilename: file.originalname,
       lessonContext: exchanges ?? [],
       expectedText: expected_text,
       exchangeIndex: parseInt(exchange_index),

@@ -13,6 +13,8 @@ interface DialogueLine {
 
 interface SpeakingTutorInput {
   audioBuffer: Buffer;
+  audioMimeType?: string;
+  audioFilename?: string;
   lessonContext: DialogueLine[];
   expectedText: string;
   exchangeIndex: number;
@@ -49,7 +51,11 @@ export async function speakingTutorAgent(
 
   let transcription: string;
   try {
-    transcription = await transcribeWithRetry(input.audioBuffer);
+    transcription = await transcribeWithRetry(
+      input.audioBuffer,
+      input.audioFilename,
+      input.audioMimeType
+    );
     console.log(`[speaking-tutor] Transcription result: "${transcription}"`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown transcription error";
@@ -91,11 +97,35 @@ export async function speakingTutorAgent(
   return { ...feedback, transcription };
 }
 
-async function transcribeWithRetry(buffer: Buffer, maxRetries = 2): Promise<string> {
+async function transcribeWithRetry(
+  buffer: Buffer,
+  filename?: string,
+  mimeType?: string,
+  maxRetries = 2
+): Promise<string> {
+  // Derive a sensible filename/mime so OpenAI sniffs the format correctly.
+  // iOS Safari sends audio/mp4; Chromium/Firefox send audio/webm.
+  const baseMime = (mimeType ?? "audio/webm").split(";")[0]!.trim().toLowerCase();
+  const extByMime: Record<string, string> = {
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+  };
+  const ext = extByMime[baseMime] ?? "webm";
+  const finalName = filename ?? `audio.${ext}`;
+  const finalType = baseMime;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[speaking-tutor] Transcription attempt ${attempt + 1}/${maxRetries + 1}`);
-      const file = await toFile(buffer, "audio.webm", { type: "audio/webm" });
+      console.log(
+        `[speaking-tutor] Transcription attempt ${attempt + 1}/${maxRetries + 1} (name=${finalName}, type=${finalType})`
+      );
+      const file = await toFile(buffer, finalName, { type: finalType });
       const transcription = await openai.audio.transcriptions.create({
         file,
         model: "gpt-4o-mini-transcribe",

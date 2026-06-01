@@ -24,11 +24,11 @@ const levels = [
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
-      <main className="flex-1 px-16 py-12 flex flex-col gap-12">
+      <main className="flex-1 px-4 py-6 md:px-16 md:py-12 pb-24 md:pb-12 flex flex-col gap-8 md:gap-12">
         <div className="flex flex-col gap-3">
-          <h1 className="font-sora text-[48px] font-semibold tracking-[-2px] text-black">
+          <h1 className="font-sora text-3xl md:text-[48px] font-semibold tracking-[-1px] md:tracking-[-2px] text-black">
             Cariockko
           </h1>
           <p className="font-sora text-sm text-[#5E5E5E]">
@@ -36,11 +36,11 @@ export default function Home() {
           </p>
         </div>
 
-        <h2 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+        <h2 className="font-sora text-xl md:text-2xl font-semibold tracking-[-1px] text-black">
           Escolha seu nível / Choose your level
         </h2>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 md:gap-6">
           {levels.map((level) => (
             <Link key={level.id} href={`/lessons/${level.id}`} className="block">
               <div className="flex border border-[#E5E5E5] hover:border-[#DC2626] transition-colors">
@@ -49,7 +49,7 @@ export default function Home() {
                   <span className="font-mono text-xs font-medium tracking-[1px] text-[#5E5E5E]">
                     {level.titlePt.toUpperCase()}
                   </span>
-                  <h3 className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+                  <h3 className="font-sora text-xl md:text-2xl font-semibold tracking-[-1px] text-black">
                     {level.title}
                   </h3>
                   <p className="font-sora text-[13px] text-[#5E5E5E]">

@@ -5,11 +5,17 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:3001
+        # Used by Next.js `rewrites()` at build time — destinations are
+        # baked into `.next/routes-manifest.json` and cannot be overridden
+        # at runtime, so they must be passed in here.
+        API_INTERNAL_URL: http://api:3001
+        MINIO_INTERNAL_URL: http://minio:9000
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:3001
       - API_INTERNAL_URL=http://api:3001
+      - MINIO_INTERNAL_URL=http://minio:9000
     depends_on:
       api:
         condition: service_healthy

@@ -25,8 +25,6 @@ type FeedbackResult = {
   transcription: string;
 } | null;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
 const PHASE_LABELS: Record<ProcessingPhase, string> = {
   idle: "",
   uploading: "Enviando áudio...",
@@ -35,6 +33,59 @@ const PHASE_LABELS: Record<ProcessingPhase, string> = {
   complete: "Concluído!",
   error: "Erro",
 };
+
+/**
+ * Returns the API base for browser fetches. We use a relative path so the
+ * request goes to the same origin as the page (Next.js then rewrites it to
+ * the API service — see web/next.config.ts). This keeps everything on a
+ * single origin/protocol, which avoids mixed-content blocks when the app is
+ * served over HTTPS (e.g. for mobile mic access over LAN).
+ */
+function getApiBaseUrl(): string {
+  return "";
+}
+
+/**
+ * Rewrites a backend-generated audio URL to a same-origin path so the
+ * browser fetches it through Next.js (and avoids mixed-content + LAN host
+ * issues). Backend stores URLs like `http://localhost:9000/audio/<key>`;
+ * we rewrite that to `/audio/<key>`, which next.config.ts proxies to MinIO.
+ */
+function rewriteAudioUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // MinIO public URLs follow `<host>:9000/<bucket>/<key>`. Our bucket is
+    // `audio`, so the pathname already starts with `/audio/...`. Strip the
+    // host so the request becomes same-origin.
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Picks the best MediaRecorder mimeType the current browser supports.
+ * Order matters: prefer opus (best transcription quality, supported on
+ * Chromium/Firefox), fall back to mp4/aac for iOS Safari which does not
+ * support webm.
+ */
+function pickRecorderMime(): { mimeType?: string; extension: string } {
+  if (typeof MediaRecorder === "undefined") return { extension: "webm" };
+  const candidates: { mime: string; ext: string }[] = [
+    { mime: "audio/webm;codecs=opus", ext: "webm" },
+    { mime: "audio/webm", ext: "webm" },
+    { mime: "audio/mp4;codecs=mp4a.40.2", ext: "m4a" },
+    { mime: "audio/mp4", ext: "m4a" },
+    { mime: "audio/ogg;codecs=opus", ext: "ogg" },
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c.mime)) {
+      return { mimeType: c.mime, extension: c.ext };
+    }
+  }
+  // Browser will pick its own default; use a generic extension.
+  return { extension: "webm" };
+}
 
 function ProcessingStatus({ phase }: { phase: ProcessingPhase }) {
   if (phase === "idle" || phase === "complete" || phase === "error") return null;
@@ -84,10 +135,12 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+  const [recordingExtension, setRecordingExtension] = useState<string>("webm");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const currentExchange = exchanges[currentIndex];
   const isAppTurn = currentExchange?.speaker === "app";
@@ -101,31 +154,82 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
         audioPreviewRef.current.pause();
         audioPreviewRef.current = null;
       }
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
     };
   }, []);
 
-  const playAudio = useCallback((url: string) => {
+  const playAudio = useCallback(async (url: string) => {
     if (!url) return;
-    const audio = new Audio(url);
-    audio.play().catch(console.error);
+    const playableUrl = rewriteAudioUrl(url);
+    try {
+      // Reuse a single audio element so a second tap stops the previous clip.
+      let audio = audioPlayerRef.current;
+      if (!audio) {
+        audio = new Audio();
+        audio.preload = "none";
+        // iOS Safari: required to play inline rather than open a full-screen player.
+        audio.setAttribute("playsinline", "");
+        audioPlayerRef.current = audio;
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      audio.src = playableUrl;
+      await audio.play();
+    } catch (err) {
+      console.error("[LessonPlayer] Audio playback failed:", err);
+      alert(
+        "Não foi possível reproduzir o áudio. Verifique se o servidor de áudio está acessível e tente novamente.\n\nCould not play audio. Check that the audio server is reachable from this device."
+      );
+    }
   }, []);
 
-  const previewRecording = () => {
+  const previewRecording = async () => {
     if (!audioBlob) return;
     if (audioPreviewRef.current) {
       audioPreviewRef.current.pause();
     }
     const audio = new Audio(URL.createObjectURL(audioBlob));
+    audio.setAttribute("playsinline", "");
     audioPreviewRef.current = audio;
-    audio.play().catch(console.error);
+    try {
+      await audio.play();
+    } catch (err) {
+      console.error("[LessonPlayer] Preview playback failed:", err);
+    }
   };
 
   const startRecording = async () => {
+    // getUserMedia requires a secure context (HTTPS) on non-localhost origins.
+    // Detect this up front to give a clearer error.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      alert(
+        "Para usar o microfone neste dispositivo, abra o app via HTTPS (ou pelo localhost).\n\nMicrophone access requires HTTPS or localhost. Open the app over HTTPS to record."
+      );
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Este navegador não suporta gravação de áudio.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
+      const { mimeType, extension } = pickRecorderMime();
+      setRecordingExtension(extension);
+
+      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, recorderOptions);
+      } catch (err) {
+        console.warn("[LessonPlayer] MediaRecorder rejected options, retrying with defaults:", err);
+        mediaRecorder = new MediaRecorder(stream);
+      }
 
       chunksRef.current = [];
       setRecordingDuration(0);
@@ -140,7 +244,9 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        // Use the recorder's reported mime (most accurate); fall back to our pick.
+        const recorderMime = mediaRecorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: recorderMime });
         setAudioBlob(blob);
         stream.getTracks().forEach((t) => t.stop());
         if (timerRef.current) {
@@ -150,11 +256,21 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
         setRecordingDuration((Date.now() - startTime) / 1000);
       };
 
-      mediaRecorder.start();
+      // Use a 1s timeslice so iOS Safari emits chunks during recording rather
+      // than only on stop — improves reliability of short clips.
+      mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
-    } catch {
-      alert("Erro ao acessar o microfone / Could not access microphone");
+    } catch (err) {
+      console.error("[LessonPlayer] getUserMedia failed:", err);
+      const name = (err as Error)?.name;
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        alert(
+          "Permissão de microfone negada. Habilite o microfone nas configurações do navegador.\n\nMicrophone permission denied. Enable it in your browser settings."
+        );
+      } else {
+        alert("Erro ao acessar o microfone / Could not access microphone");
+      }
     }
   };
 
@@ -166,19 +282,30 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
   const submitAudio = async () => {
     if (!audioBlob || isProcessing) return;
 
+    if (audioBlob.size === 0) {
+      setFeedback({
+        is_correct: false,
+        feedback_pt: "A gravação está vazia. Tente novamente.",
+        transcription: "",
+      });
+      return;
+    }
+
     setFeedback(null);
     setProcessingPhase("uploading");
 
-    console.log(`[LessonPlayer] Submitting audio. Size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+    console.log(
+      `[LessonPlayer] Submitting audio. Size: ${audioBlob.size} bytes, type: ${audioBlob.type}, ext: ${recordingExtension}`
+    );
 
     const formData = new FormData();
-    formData.append("audio", audioBlob, "recording.webm");
+    formData.append("audio", audioBlob, `recording.${recordingExtension}`);
     formData.append("lesson_id", lessonId);
     formData.append("exchange_index", currentExchange.order_index.toString());
     formData.append("expected_text", currentExchange.english_text);
 
     try {
-      const res = await fetch(`${API_URL}/api/speaking-tutor`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/speaking-tutor`, {
         method: "POST",
         body: formData,
       });
@@ -230,7 +357,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
       setRetryCount(0);
     } else {
       setIsCompleted(true);
-      fetch(`${API_URL}/api/progress`, {
+      fetch(`${getApiBaseUrl()}/api/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -253,7 +380,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
         </p>
         <button
           onClick={() => window.history.back()}
-          className="mt-4 px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+          className="mt-4 px-6 py-3 min-h-[44px] bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
         >
           Voltar às lições
         </button>
@@ -263,11 +390,18 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
 
   if (!currentExchange) return null;
 
+  // Shared button class strings for thumb-friendly tap targets on mobile.
+  const btnBase = "min-h-[44px] font-sora text-[12px] font-medium inline-flex items-center justify-center";
+  const btnPrimary = `${btnBase} px-4 py-3 bg-[#DC2626] text-[#FAFAFA]`;
+  const btnSecondary = `${btnBase} px-4 py-3 border border-[#E5E5E5] text-black`;
+  const btnSuccess = `${btnBase} px-4 py-3 bg-[#22C55E] text-[#FAFAFA]`;
+  const btnDanger = `${btnBase} px-6 py-3 bg-[#991B1B] text-[#FAFAFA]`;
+
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6 md:gap-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <span className="font-mono text-xs text-[#5E5E5E]">{progress}</span>
-        <div className="w-48 h-[4px] bg-[#E5E5E5]">
+        <div className="w-full sm:w-48 h-[4px] bg-[#E5E5E5]">
           <div
             className="h-full bg-[#DC2626]"
             style={{
@@ -278,25 +412,25 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
       </div>
 
       {isAppTurn ? (
-        <div className="border border-[#E5E5E5] p-8 flex flex-col gap-4">
+        <div className="border border-[#E5E5E5] p-4 md:p-8 flex flex-col gap-4">
           <span className="font-mono text-[12px] font-medium tracking-[1px] text-[#999999]">
             App
           </span>
-          <p className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+          <p className="font-sora text-lg md:text-2xl font-semibold tracking-[-1px] text-black break-words">
             {currentExchange.english_text}
           </p>
 
           {showTranslation && (
-            <p className="font-sora text-sm text-[#5E5E5E]">
+            <p className="font-sora text-sm text-[#5E5E5E] break-words">
               {currentExchange.portuguese_translation}
             </p>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 md:gap-3">
             {currentExchange.audio_url && (
               <button
                 onClick={() => playAudio(currentExchange.audio_url!)}
-                className="flex items-center gap-2 px-4 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+                className={`${btnPrimary} gap-2`}
               >
                 <Volume2 size={16} />
                 Ouvir
@@ -304,38 +438,35 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
             )}
             <button
               onClick={() => setShowTranslation(!showTranslation)}
-              className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
+              className={btnSecondary}
             >
               {showTranslation ? "Ocultar" : "Tradução"}
             </button>
-            <button
-              onClick={advance}
-              className="px-4 py-3 bg-[#22C55E] text-[#FAFAFA] font-sora text-[12px] font-medium"
-            >
+            <button onClick={advance} className={btnSuccess}>
               Próximo →
             </button>
           </div>
         </div>
       ) : (
-        <div className="border border-[#E5E5E5] p-8 flex flex-col gap-4">
+        <div className="border border-[#E5E5E5] p-4 md:p-8 flex flex-col gap-4">
           <span className="font-mono text-[12px] font-medium tracking-[1px] text-[#999999]">
             Sua vez / Your turn
           </span>
-          <p className="font-sora text-2xl font-semibold tracking-[-1px] text-black">
+          <p className="font-sora text-lg md:text-2xl font-semibold tracking-[-1px] text-black break-words">
             {currentExchange.english_text}
           </p>
 
           {showTranslation && (
-            <p className="font-sora text-sm text-[#5E5E5E]">
+            <p className="font-sora text-sm text-[#5E5E5E] break-words">
               {currentExchange.portuguese_translation}
             </p>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 md:gap-3">
             {currentExchange.audio_url && (
               <button
                 onClick={() => playAudio(currentExchange.audio_url!)}
-                className="flex items-center gap-2 px-4 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+                className={`${btnPrimary} gap-2`}
               >
                 <Volume2 size={16} />
                 Ouvir referência
@@ -343,7 +474,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
             )}
             <button
               onClick={() => setShowTranslation(!showTranslation)}
-              className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
+              className={btnSecondary}
             >
               {showTranslation ? "Ocultar" : "Tradução"}
             </button>
@@ -351,11 +482,11 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
 
           <ProcessingStatus phase={processingPhase} />
 
-          <div className="flex gap-3 items-center flex-wrap">
+          <div className="flex flex-wrap gap-2 md:gap-3 items-center">
             {!isRecording && !audioBlob && (
               <button
                 onClick={startRecording}
-                className="flex items-center gap-2 px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+                className={`${btnPrimary} gap-2 px-6`}
               >
                 <Mic size={16} />
                 Gravar
@@ -366,7 +497,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
               <>
                 <button
                   onClick={stopRecording}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#991B1B] text-[#FAFAFA] font-sora text-[12px] font-medium"
+                  className={`${btnDanger} gap-2`}
                 >
                   <Square size={16} />
                   Parar
@@ -382,13 +513,13 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
               <>
                 <button
                   onClick={submitAudio}
-                  className="px-6 py-3 bg-[#DC2626] text-[#FAFAFA] font-sora text-[12px] font-medium"
+                  className={`${btnPrimary} px-6`}
                 >
                   Enviar
                 </button>
                 <button
                   onClick={previewRecording}
-                  className="flex items-center gap-2 px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
+                  className={`${btnSecondary} gap-2`}
                 >
                   <Volume2 size={16} />
                   Ouvir gravação
@@ -398,7 +529,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
                     setAudioBlob(null);
                     setRecordingDuration(0);
                   }}
-                  className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
+                  className={btnSecondary}
                 >
                   Regravar
                 </button>
@@ -424,13 +555,17 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
                   <span className="font-mono text-[10px] tracking-[1px] text-[#999999] uppercase">
                     O que você disse:
                   </span>
-                  <p className="font-sora text-sm text-[#000000] mt-1">
+                  <p className="font-sora text-sm text-[#000000] mt-1 break-words">
                     &ldquo;{feedback.transcription}&rdquo;
                   </p>
                 </div>
               )}
 
-              <p className={`font-sora text-sm font-medium ${feedback.is_correct ? "text-[#22C55E]" : "text-[#DC2626]"}`}>
+              <p
+                className={`font-sora text-sm font-medium break-words ${
+                  feedback.is_correct ? "text-[#22C55E]" : "text-[#DC2626]"
+                }`}
+              >
                 {feedback.feedback_pt}
               </p>
 
@@ -439,7 +574,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
                   <span className="font-mono text-[10px] tracking-[1px] text-[#999999] uppercase">
                     O que era esperado:
                   </span>
-                  <p className="font-sora text-sm text-[#000000] mt-1">
+                  <p className="font-sora text-sm text-[#000000] mt-1 break-words">
                     &ldquo;{currentExchange.english_text}&rdquo;
                   </p>
                 </div>
@@ -448,7 +583,7 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
           )}
 
           {feedback && (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 md:gap-3">
               <button
                 onClick={() => {
                   if (feedback.is_correct) {
@@ -457,17 +592,14 @@ export function LessonPlayer({ lessonId, exchanges }: LessonPlayerProps) {
                     handleRetry();
                   }
                 }}
-                className={`px-6 py-3 text-[#FAFAFA] font-sora text-[12px] font-medium ${
+                className={`${btnBase} px-6 py-3 text-[#FAFAFA] ${
                   feedback.is_correct ? "bg-[#22C55E]" : "bg-[#DC2626]"
                 }`}
               >
                 {feedback.is_correct ? "Próximo →" : "Tentar novamente"}
               </button>
               {!feedback.is_correct && retryCount > 0 && (
-                <button
-                  onClick={advance}
-                  className="px-4 py-3 border border-[#E5E5E5] font-sora text-[12px] font-medium text-black"
-                >
+                <button onClick={advance} className={btnSecondary}>
                   Pular →
                 </button>
               )}
