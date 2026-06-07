@@ -17,14 +17,14 @@ Cariockko solves this by providing an accessible, private space where students p
 
 ### Creating lessons
 
-The **Content Producer** is an in-app assistant that creates lessons tailored to your goals. It runs in a dedicated **Criar Lições** tab — open it from the sidebar (sparkles icon).
+The **Content Producer** is an in-app assistant that creates lessons tailored to your goals. It runs in a dedicated **Criar Lições** flow — open it from the sidebar (sparkles icon) or from the homepage CTAs.
 
-1. **Welcome** — pick the quick-start template ("Gerar lições genéricas para mim") or type your own request.
-2. **Conversation** — the agent asks 1–2 short questions (count, level, theme) if anything is missing.
+1. **Welcome** — pick **Criar com minhas preferências** (guided) or **Gerar plano rápido** (quick).
+2. **Conversation** — the agent asks 1–2 short questions when needed, or proposes a ready-to-run plan immediately.
 3. **Plan review** — when the agent has enough, it shows a `Generation Plan` card with the exact lessons, levels, theme, characters and estimated time. Edit if you want, or hit **Confirmar e Gerar**.
-4. **Live progress** — the generation card streams per-lesson status updates via SSE. You can navigate away from the tab and come back; the UI re-attaches to the in-flight job and picks up where it left off.
+4. **Live progress** — the generation card streams per-lesson status updates via SSE. You can navigate away and come back; the UI restores the saved chat/session state and re-attaches to the latest in-flight job.
 5. **Failures** — if any lesson fails, it shows a **TENTAR NOVAMENTE** chip that re-generates only that lesson (completed lessons are untouched).
-6. **Done** — once generation finishes, the new lessons appear in the library under their level. Hit **Nova conversa** to start over.
+6. **Done** — once generation finishes, the new lessons appear in the library under their level. Hit **NOVA CONVERSA** to start over.
 
 Out-of-scope requests (grammar questions, translations, "write me a poem") are redirected by a built-in guardrail.
 
@@ -104,10 +104,10 @@ make start
 # or: docker compose up -d --build
 
 # 4. Open http://localhost:3000 in your browser
-# 5. Click the "Criar" tab (sparkles icon) and start a conversation
+# 5. Open the "Criar" tab (sparkles icon) or use the homepage CTAs
 ```
 
-The app boots with an empty catalogue. The first time you open the **Criar Lições** tab the agent will walk you through creating your first batch of lessons.
+The app boots with an empty catalogue. The first time you open the **Criar Lições** flow the agent will walk you through creating your first batch of lessons.
 
 ### Verify Services
 
@@ -284,7 +284,12 @@ POST /api/content-producer/jobs/:jobId/cancel
 }
 ```
 
-The chat endpoint accepts `lesson_index` and `count` per level up to 20, and at most 60 lessons per generation (server-enforced). The chat endpoint is rate-limited at 30 messages / minute; the generate endpoint at 5 generations / 10 minutes per session.
+Notes:
+- `session_id` must be a short browser session ID (`[A-Za-z0-9_-]{1,128}`)
+- Each plan item can request up to 20 lessons, with a maximum of 60 lessons per generation
+- `chat` is rate-limited at 30 messages/minute per session
+- `generate` is rate-limited at 5 requests/10 minutes per session
+- SSE emits `progress` snapshots and a final `done` event when the job completes, fails, or is cancelled
 
 ### Speaking Tutor
 
@@ -434,6 +439,11 @@ cariockko/
 ├── .env.example                               # Environment template
 └── README.md
 ```
+
+## Documentation
+
+- [Content Producer Guide](docs/GUIDES/content-producer.md)
+- [API Reference](docs/API.md)
 
 ## Development
 
