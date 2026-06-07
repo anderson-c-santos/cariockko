@@ -11,7 +11,7 @@ export function getOrCreateSessionId(): string {
   }
   let id = window.localStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = `web-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    id = `web-${crypto.randomUUID()}`;
     window.localStorage.setItem(SESSION_KEY, id);
   }
   return id;

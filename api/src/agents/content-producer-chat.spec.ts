@@ -100,6 +100,31 @@ describe("content-producer-chat", () => {
       expect(mockPool.query).toHaveBeenCalledTimes(2);
     });
 
+    it("synthesizes a reply when the model returns an empty plan reply", async () => {
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      const llm = fakeLlm({
+        ready: true,
+        reply: "",
+        plan: {
+          lessons: [{ level: "beginner", theme: "Ordering coffee", count: 3 }],
+          characters: { app: "Aimee", student: "Todd" },
+          estimatedMinutes: 4,
+        },
+      });
+
+      const result = await chat({
+        sessionId: "test-session",
+        message: "Quero 3 lições iniciantes sobre café",
+        llmFactory: () => llm as never,
+      });
+
+      expect(result.reply).toContain("Montei um plano com 3 lições");
+      expect(result.reply).toContain("Ordering coffee");
+    });
+
     it("applies the guardrail when the model says so", async () => {
       mockPool.query
         .mockResolvedValueOnce({ rows: [], rowCount: 0 })

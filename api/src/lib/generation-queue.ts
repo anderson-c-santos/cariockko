@@ -4,10 +4,13 @@ import { pool } from "./db.js";
 import {
   createSemaphore,
   generateAndPersistLesson,
-  pickTheme,
-  LESSON_THEMES,
   type Level,
 } from "../agents/lesson-generator.js";
+
+/** How long a completed/failed/cancelled job stays in the in-memory map
+ *  so that SSE re-attaches within this window can still receive the final
+ *  snapshot. After this the entry is removed to prevent unbounded growth. */
+const JOB_RETENTION_MS = 5 * 60 * 1000; // 5 minutes
 
 const GEN_CONCURRENCY = parseInt(process.env.GEN_CONCURRENCY ?? "3", 10);
 
@@ -72,13 +75,25 @@ interface InternalJob {
 }
 
 const jobs = new Map<string, InternalJob>();
+/** Secondary index: sessionId → most-recent jobId (for O(1) lookups). */
+const sessionIndex = new Map<string, string>();
+
+function scheduleJobPruning(id: string): void {
+  setTimeout(() => {
+    jobs.delete(id);
+    // Only remove the session index entry if it still points to this job.
+    for (const [sid, jid] of sessionIndex) {
+      if (jid === id) sessionIndex.delete(sid);
+    }
+  }, JOB_RETENTION_MS);
+}
 
 function emptyProgressFor(plan: PlanInput): JobProgress {
   const lessons: LessonProgress[] = [];
   for (const entry of plan.lessons) {
     for (let i = 0; i < entry.count; i += 1) {
-      const theme = pickUniqueTheme(plan, entry.level, i);
-      lessons.push({ level: entry.level, theme, status: "pending" });
+      // Use the plan's theme string directly so user-supplied topics are preserved.
+      lessons.push({ level: entry.level, theme: entry.theme, status: "pending" });
     }
   }
   return {
@@ -90,11 +105,6 @@ function emptyProgressFor(plan: PlanInput): JobProgress {
   };
 }
 
-function pickUniqueTheme(plan: PlanInput, level: Level, index: number): string {
-  const themes = LESSON_THEMES[level] ?? [];
-  if (themes.length === 0) return "General conversation";
-  return themes[index % themes.length] ?? themes[0] ?? "General conversation";
-}
 
 async function persistJob(snapshot: JobSnapshot): Promise<void> {
   await pool.query(
@@ -175,6 +185,7 @@ export async function enqueueJob(
     subscribers: new Set(),
   };
   jobs.set(id, internal);
+  sessionIndex.set(sessionId, id);
   await persistJob(snapshot);
   notify(internal);
 
@@ -186,6 +197,7 @@ export async function enqueueJob(
     internal.snapshot.updatedAt = new Date().toISOString();
     void persistJob(internal.snapshot);
     notify(internal);
+    scheduleJobPruning(id);
   });
 
   return snapshot;
@@ -207,9 +219,6 @@ async function runJob(job: InternalJob): Promise<void> {
 
         const lesson = job.snapshot.progress.lessons[lessonIndex];
         if (!lesson) return;
-        const themeIndex = (LESSON_THEMES[lesson.level] ?? []).indexOf(lesson.theme);
-        const safeIndex = themeIndex >= 0 ? themeIndex : 0;
-
         updateProgress(job, lessonIndex, { status: "generating" });
         await persistJob(job.snapshot);
         notify(job);
@@ -217,7 +226,8 @@ async function runJob(job: InternalJob): Promise<void> {
         try {
           const result = await generateAndPersistLesson({
             level: lesson.level,
-            themeIndex: safeIndex,
+            themeIndex: lessonIndex,
+            themeString: lesson.theme,
           });
           updateProgress(job, lessonIndex, {
             status: "completed",
@@ -248,6 +258,7 @@ async function runJob(job: InternalJob): Promise<void> {
   job.snapshot.updatedAt = new Date().toISOString();
   await persistJob(job.snapshot);
   notify(job);
+  scheduleJobPruning(job.snapshot.id);
 }
 
 export async function retryLesson(
@@ -264,9 +275,6 @@ export async function retryLesson(
   job.snapshot.status = "running";
   job.snapshot.updatedAt = new Date().toISOString();
 
-  const themeIndex = (LESSON_THEMES[lesson.level] ?? []).indexOf(lesson.theme);
-  const safeIndex = themeIndex >= 0 ? themeIndex : 0;
-
   updateProgress(job, lessonIndex, { status: "generating", error: undefined });
   await persistJob(job.snapshot);
   notify(job);
@@ -275,7 +283,8 @@ export async function retryLesson(
     try {
       const result = await generateAndPersistLesson({
         level: lesson.level,
-        themeIndex: safeIndex,
+        themeIndex: lessonIndex,
+        themeString: lesson.theme,
       });
       updateProgress(job, lessonIndex, {
         status: "completed",
@@ -290,23 +299,38 @@ export async function retryLesson(
       });
     }
 
-    const allCompleted = job.snapshot.progress.lessons.every(
-      (l) => l.status === "completed"
-    );
-    const anyFailed = job.snapshot.progress.lessons.some(
-      (l) => l.status === "failed"
-    );
-    job.snapshot.status = allCompleted
-      ? "completed"
-      : anyFailed
-        ? job.cancelToken.cancelled
-          ? "cancelled"
-          : "running"
-        : "completed";
+    // Recompute overall status: honour cancel token, then check whether any
+    // lesson is still in-flight. Only mark as "running" when there are
+    // actually lessons still generating — otherwise we get stuck.
+    if (job.cancelToken.cancelled) {
+      job.snapshot.status = "cancelled";
+    } else {
+      const anyGenerating = job.snapshot.progress.lessons.some(
+        (l) => l.status === "generating"
+      );
+      const anyFailed = job.snapshot.progress.lessons.some(
+        (l) => l.status === "failed"
+      );
+      job.snapshot.status = anyGenerating
+        ? "running"
+        : anyFailed
+          ? "failed"
+          : "completed";
+    }
     job.snapshot.updatedAt = new Date().toISOString();
     await persistJob(job.snapshot);
     notify(job);
-  })();
+    scheduleJobPruning(job.snapshot.id);
+  })().catch((err) => {
+    // Catch unhandled errors from the IIFE so they don't crash the process.
+    console.error(`[queue] retryLesson IIFE for ${jobId} crashed:`, err);
+    job.snapshot.status = "failed";
+    job.snapshot.error = err instanceof Error ? err.message : "Unknown retry error";
+    job.snapshot.updatedAt = new Date().toISOString();
+    void persistJob(job.snapshot);
+    notify(job);
+    scheduleJobPruning(job.snapshot.id);
+  });
 
   return job.snapshot;
 }
@@ -342,9 +366,13 @@ export function getJobSnapshot(jobId: string): JobSnapshot | null {
 export async function getLatestJobForSession(
   sessionId: string
 ): Promise<JobSnapshot | null> {
-  // If we have a live in-memory job, prefer it.
-  for (const job of jobs.values()) {
-    if (job.snapshot.sessionId === sessionId) return job.snapshot;
+  // O(1) via secondary index; fall back to scan only if index is stale.
+  const indexedId = sessionIndex.get(sessionId);
+  if (indexedId) {
+    const job = jobs.get(indexedId);
+    if (job) return job.snapshot;
+    // Index pointed to a pruned entry — clean it up.
+    sessionIndex.delete(sessionId);
   }
 
   const { rows } = await pool.query<{

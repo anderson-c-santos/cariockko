@@ -1,5 +1,3 @@
-import { pool } from "./db.js";
-
 const DEFAULT_KEEPALIVE_MS = 15_000;
 
 export interface SseClient {

@@ -63,16 +63,24 @@ export default async function Home() {
               Você ainda não tem lições
             </h2>
             <p className="font-sora text-sm text-[#5E5E5E]">
-              Crie suas primeiras lições personalizadas com o Content Producer — escolha temas,
-              níveis e quantidade em uma conversa guiada.
+              Comece me contando suas preferências ou gere um plano rápido com temas do dia a dia.
             </p>
-            <Link
-              href="/create-lessons"
-              className="inline-flex items-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
-            >
-              <Sparkles size={16} />
-              Criar minhas primeiras lições
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <Link
+                href="/create-lessons?mode=guided"
+                className="inline-flex items-center justify-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
+              >
+                <Sparkles size={16} />
+                Criar com minhas preferências
+              </Link>
+              <Link
+                href="/create-lessons?mode=quick"
+                className="inline-flex items-center justify-center gap-2 border border-[#E5E5E5] px-4 py-2 font-sora text-sm text-black hover:border-black"
+              >
+                <Sparkles size={16} />
+                Gerar plano rápido
+              </Link>
+            </div>
           </div>
         )}
 
@@ -104,13 +112,22 @@ export default async function Home() {
         </div>
 
         {totalLessons > 0 && (
-          <Link
-            href="/create-lessons"
-            className="inline-flex items-center gap-2 self-start font-sora text-sm text-[#5E5E5E] hover:text-black"
-          >
-            <BookOpen size={14} />
-            Criar mais lições
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 self-start">
+            <Link
+              href="/create-lessons?mode=guided"
+              className="inline-flex items-center gap-2 font-sora text-sm text-[#5E5E5E] hover:text-black"
+            >
+              <BookOpen size={14} />
+              Criar com minhas preferências
+            </Link>
+            <Link
+              href="/create-lessons?mode=quick"
+              className="inline-flex items-center gap-2 font-sora text-sm text-[#5E5E5E] hover:text-black"
+            >
+              <Sparkles size={14} />
+              Gerar plano rápido
+            </Link>
+          </div>
         )}
       </main>
     </div>

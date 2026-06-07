@@ -5,6 +5,9 @@ const mockInvoke = vi.fn();
 vi.mock("@langchain/openai", () => ({
   ChatOpenAI: class FakeChatOpenAI {
     invoke = (...args: unknown[]) => mockInvoke(...args);
+    withStructuredOutput() {
+      return this;
+    }
   },
 }));
 
@@ -138,6 +141,9 @@ describe("generateAndPersistLesson", () => {
     mockInvoke.mockResolvedValueOnce({
       content: JSON.stringify({ title: "Sample", exchanges }),
     });
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockQuery.mockResolvedValueOnce({ rows: [{ exists: false }], rowCount: 1 });
     mockQuery
       .mockResolvedValueOnce({
         rows: [{ id: "lesson-id", title: "Sample", level: "beginner" }],
@@ -161,6 +167,40 @@ describe("generateAndPersistLesson", () => {
 
     expect(result.lessonId).toBe("lesson-id");
     expect(progressEvents).toEqual([1, 2, 3]);
+  });
+
+  it("rewrites non-English titles before persisting", async () => {
+    const exchanges = [
+      {
+        order_index: 0,
+        speaker: "app" as const,
+        english_text: "Hi",
+        portuguese_translation: "Olá",
+      },
+    ];
+
+    mockInvoke
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ title: "Lição de compras", exchanges }),
+      })
+      .mockImplementation(() => ({ title: "Shopping Lesson" }));
+
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockQuery.mockResolvedValueOnce({ rows: [{ exists: false }], rowCount: 1 });
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: "lesson-id", title: "Shopping Lesson", level: "beginner" }], rowCount: 1 });
+    mockSpeechCreate.mockResolvedValueOnce({
+      arrayBuffer: async () => Buffer.from("audio-0").buffer,
+    });
+    mockUpload.mockResolvedValueOnce("http://minio/0.mp3");
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const result = await generateAndPersistLesson({
+      level: "beginner",
+      themeIndex: 0,
+    });
+
+    expect(result.title).toBe("Shopping Lesson");
   });
 });
 

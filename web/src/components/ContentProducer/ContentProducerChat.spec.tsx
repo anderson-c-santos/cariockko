@@ -43,7 +43,10 @@ describe("ContentProducerChat", () => {
       expect(screen.getByText("Crie suas lições")).toBeInTheDocument();
     });
     expect(
-      screen.getByRole("button", { name: /gerar lições genéricas/i })
+      screen.getByRole("button", { name: /gerar lições sugeridas/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /criar com minhas preferências/i })
     ).toBeInTheDocument();
   });
 
@@ -55,13 +58,36 @@ describe("ContentProducerChat", () => {
     render(<ContentProducerChat />);
     await waitFor(() => screen.getByText("Crie suas lições"));
 
-    await user.click(screen.getByRole("button", { name: /gerar lições genéricas/i }));
+    await user.click(screen.getByRole("button", { name: /gerar lições sugeridas/i }));
 
     await waitFor(() => {
-      expect(mockChat).toHaveBeenCalledWith("test-session", "Gere lições genéricas para mim");
+      expect(mockChat).toHaveBeenCalledWith(
+        "test-session",
+        expect.stringContaining("um único tema central")
+      );
     });
     await waitFor(() => {
-      expect(screen.getByText("Gere lições genéricas para mim")).toBeInTheDocument();
+      expect(
+        screen.getByText(/um único tema central bem coerente/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("sends the guided onboarding prompt when the preference flow is chosen", async () => {
+    mockChat.mockResolvedValueOnce({
+      reply: "Me conta seus objetivos e interesses.",
+    });
+    const user = userEvent.setup();
+    render(<ContentProducerChat initialMode="guided" />);
+    await waitFor(() => screen.getByText("Crie suas lições"));
+
+    await user.click(screen.getByRole("button", { name: /criar com minhas preferências/i }));
+
+    await waitFor(() => {
+      expect(mockChat).toHaveBeenCalledWith(
+        "test-session",
+        expect.stringContaining("um único tema principal")
+      );
     });
   });
 
@@ -77,7 +103,7 @@ describe("ContentProducerChat", () => {
     const user = userEvent.setup();
     render(<ContentProducerChat />);
     await waitFor(() => screen.getByText("Crie suas lições"));
-    await user.click(screen.getByRole("button", { name: /gerar lições genéricas/i }));
+    await user.click(screen.getByRole("button", { name: /gerar lições sugeridas/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Plano de Geração / Generation Plan")).toBeInTheDocument();
@@ -125,7 +151,7 @@ describe("ContentProducerChat", () => {
     const user = userEvent.setup();
     render(<ContentProducerChat />);
     await waitFor(() => screen.getByText("Crie suas lições"));
-    await user.click(screen.getByRole("button", { name: /gerar lições genéricas/i }));
+    await user.click(screen.getByRole("button", { name: /gerar lições sugeridas/i }));
     await waitFor(() => screen.getByText("Plano de Geração / Generation Plan"));
     await user.click(screen.getByRole("button", { name: /confirmar e gerar/i }));
 
@@ -136,6 +162,34 @@ describe("ContentProducerChat", () => {
       expect(screen.getByText(/Gerando Lições/i)).toBeInTheDocument();
     });
     expect(mockSubscribe).toHaveBeenCalledWith("job-1", expect.anything());
+  });
+
+  it("returns to chat with a prompt when editing the plan", async () => {
+    mockChat.mockResolvedValueOnce({
+      reply: "Plano pronto!",
+      plan: {
+        lessons: [{ level: "beginner", theme: "Coffee", count: 2 }],
+        characters: { app: "Aimee", student: "Todd" },
+        estimatedMinutes: 5,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<ContentProducerChat />);
+    await waitFor(() => screen.getByText("Crie suas lições"));
+    await user.click(screen.getByRole("button", { name: /gerar lições sugeridas/i }));
+    await waitFor(() => screen.getByText("Plano de Geração / Generation Plan"));
+
+    await user.click(screen.getByRole("button", { name: /editar plano/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Certo. Me diga o que você quer mudar no plano: nível, tema, quantidade ou contexto."
+        )
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole("textbox", { name: /mensagem para o content producer/i })).toBeInTheDocument();
   });
 
   it("shows progress rows with the right status icon", async () => {

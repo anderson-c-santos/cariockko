@@ -53,5 +53,6 @@ CREATE TABLE IF NOT EXISTS lesson_generation_jobs (
 CREATE INDEX idx_dialogue_exchanges_lesson ON dialogue_exchanges(lesson_id, order_index);
 CREATE INDEX idx_user_progress_session ON user_progress(session_id);
 CREATE INDEX idx_lessons_level ON lessons(level);
+CREATE UNIQUE INDEX IF NOT EXISTS lessons_title_lower_unique_idx ON lessons(LOWER(title));
 CREATE INDEX idx_content_producer_sessions_session ON content_producer_sessions(session_id);
 CREATE INDEX idx_lesson_generation_jobs_session ON lesson_generation_jobs(session_id, created_at DESC);

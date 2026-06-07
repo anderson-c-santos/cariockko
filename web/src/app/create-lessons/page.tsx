@@ -3,12 +3,19 @@ import { ContentProducerChat } from "@/components/ContentProducer/ContentProduce
 
 export const dynamic = "force-dynamic";
 
-export default function CreateLessonsPage() {
+export default async function CreateLessonsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string; level?: string }>;
+}) {
+  const { mode, level } = await searchParams;
+  const initialMode = mode === "guided" ? "guided" : "quick";
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
       <main className="flex-1 flex flex-col md:px-8 md:py-8 px-0 py-0 pb-24 md:pb-8">
-        <ContentProducerChat />
+        <ContentProducerChat initialMode={initialMode} preferredLevel={level} />
       </main>
     </div>
   );

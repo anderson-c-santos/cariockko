@@ -1,20 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ArrowUp,
-  Sparkles,
-  X,
-  ClipboardList,
-  Pencil,
-  Check,
-  Loader,
-  CircleCheck,
-  CircleDashed,
-  CircleAlert,
-  RefreshCw,
-  RotateCcw,
-} from "lucide-react";
+import { X, Loader } from "lucide-react";
 import {
   chatWithProducer,
   clearProducerSession,
@@ -24,27 +11,45 @@ import {
   startGeneration,
   cancelJob,
   type ChatMessage,
-  type GenerationPlan,
   type JobSnapshot,
-  type LessonProgress,
 } from "@/lib/api";
 import { subscribeJobEvents } from "@/lib/sse";
-import { getOrCreateSessionId } from "@/lib/session";
+import { getOrCreateSessionId, clearSessionId } from "@/lib/session";
+import { WelcomeView } from "./WelcomeView";
+import { MessageBubble } from "./MessageBubble";
+import { ChatInput } from "./ChatInput";
+import { PlanCard } from "./PlanCard";
+import { GenerationProgressCard } from "./GenerationProgressCard";
+import { DoneFooter } from "./DoneFooter";
 
 type View = "welcome" | "chatting" | "planReview" | "generating" | "done";
 
+type FlowMode = "quick" | "guided";
+
 interface PendingPlan {
-  plan: GenerationPlan;
+  plan: import("@/lib/api").GenerationPlan;
   messageIndex: number;
 }
 
-const QUICK_START_MESSAGE = "Gere lições genéricas para mim";
-
-function getLevelLabel(level: "beginner" | "intermediate" | "advanced"): string {
-  return { beginner: "Iniciante", intermediate: "Intermediário", advanced: "Avançado" }[level];
+function buildQuickStartMessage(preferredLevel?: string): string {
+  return preferredLevel
+    ? `Quero um conjunto de lições no nível ${preferredLevel} com um único tema central bem coerente e útil do dia a dia. Sugira temas concretos e diferentes entre si dentro desse mesmo contexto, e monte um plano pronto, sem pedir detalhes extras.`
+    : "Quero um conjunto de lições com um único tema central bem coerente e útil do dia a dia. Sugira temas concretos e diferentes entre si dentro desse mesmo contexto, e monte um plano pronto, sem pedir detalhes extras.";
 }
 
-export function ContentProducerChat() {
+function buildGuidedStartMessage(preferredLevel?: string): string {
+  return preferredLevel
+    ? `Quero criar minhas primeiras lições no nível ${preferredLevel}. Me faça perguntas curtas sobre meus objetivos, interesses e rotina e sugira um único tema principal com variações coerentes para eu escolher.`
+    : "Quero criar minhas primeiras lições. Me faça perguntas curtas sobre meus objetivos, interesses e rotina e sugira um único tema principal com variações coerentes para eu escolher.";
+}
+
+export function ContentProducerChat({
+  initialMode = "quick",
+  preferredLevel,
+}: {
+  initialMode?: FlowMode;
+  preferredLevel?: string;
+}) {
   const [view, setView] = useState<View>("welcome");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -93,7 +98,8 @@ export function ContentProducerChat() {
         setView("chatting");
       }
     } catch (err) {
-      console.error("Failed to restore session:", err);
+      const message = err instanceof Error ? err.message : "Falha ao restaurar sessão.";
+      setError(message);
     } finally {
       setRestored(true);
     }
@@ -137,10 +143,14 @@ export function ContentProducerChat() {
           plan: response.plan,
           guardrail: response.guardrail,
         };
-        setMessages((prev) => [...prev, assistantMessage]);
+        let assistantIndex = 0;
+        setMessages((prev) => {
+          assistantIndex = prev.length;
+          return [...prev, assistantMessage];
+        });
 
         if (response.plan && !response.guardrail) {
-          setPendingPlan({ plan: response.plan, messageIndex: messages.length + 1 });
+          setPendingPlan({ plan: response.plan, messageIndex: assistantIndex });
           setView("planReview");
         }
       } catch (err) {
@@ -152,7 +162,7 @@ export function ContentProducerChat() {
         setSending(false);
       }
     },
-    [messages.length, sending]
+    [sending]
   );
 
   const confirmPlan = useCallback(async () => {
@@ -199,6 +209,8 @@ export function ContentProducerChat() {
     } catch {
       // ignore — local reset is more important than server sync
     }
+    clearSessionId();
+    sessionIdRef.current = getOrCreateSessionId();
     setMessages([]);
     setPendingPlan(null);
     setJob(null);
@@ -226,7 +238,13 @@ export function ContentProducerChat() {
         </div>
       )}
 
-      {view === "welcome" && <WelcomeView onQuickStart={() => void sendMessage(QUICK_START_MESSAGE)} />}
+      {view === "welcome" && (
+        <WelcomeView
+          defaultFlow={initialMode}
+          onQuickStart={() => void sendMessage(buildQuickStartMessage(preferredLevel))}
+          onGuidedStart={() => void sendMessage(buildGuidedStartMessage(preferredLevel))}
+        />
+      )}
 
       {(view === "chatting" || view === "planReview" || view === "generating" || view === "done") && (
         <>
@@ -251,9 +269,6 @@ export function ContentProducerChat() {
               <MessageBubble
                 key={`${m.role}-${i}`}
                 message={m}
-                isLastAssistant={
-                  m.role === "assistant" && i === messages.length - 1
-                }
               />
             ))}
 
@@ -263,7 +278,16 @@ export function ContentProducerChat() {
                 onConfirm={() => void confirmPlan()}
                 onEdit={() => {
                   setPendingPlan(null);
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      role: "assistant",
+                      content:
+                        "Certo. Me diga o que você quer mudar no plano: nível, tema, quantidade ou contexto.",
+                    },
+                  ]);
                   setView("chatting");
+                  setDraft("");
                 }}
               />
             )}
@@ -298,287 +322,6 @@ export function ContentProducerChat() {
           )}
         </>
       )}
-    </div>
-  );
-}
-
-function WelcomeView({ onQuickStart }: { onQuickStart: () => void }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-6">
-      <div className="w-14 h-14 rounded-full bg-black text-[#FAFAFA] flex items-center justify-center">
-        <Sparkles size={24} />
-      </div>
-      <div className="flex flex-col gap-2 max-w-md">
-        <h1 className="font-sora text-2xl md:text-3xl font-semibold tracking-[-1px] text-black">
-          Crie suas lições
-        </h1>
-        <p className="font-sora text-sm md:text-base text-[#5E5E5E]">
-          Diga ao Content Producer o que você quer aprender ou comece com um template rápido.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onQuickStart}
-        className="inline-flex items-center gap-2 border border-[#E5E5E5] hover:border-black px-4 py-3 font-sora text-sm text-black transition-colors"
-      >
-        <Sparkles size={16} />
-        Gerar lições genéricas para mim
-      </button>
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: ChatMessage; isLastAssistant: boolean }) {
-  const isUser = message.role === "user";
-  return (
-    <div
-      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-      data-testid={`bubble-${message.role}`}
-    >
-      {!isUser && (
-        <div className="shrink-0 w-8 h-8 rounded-full bg-[#DC2626] text-[#FAFAFA] flex items-center justify-center font-mono text-[11px] font-semibold mr-2 mt-1">
-          CP
-        </div>
-      )}
-      <div
-        className={`max-w-[80%] px-4 py-3 font-sora text-sm leading-relaxed ${
-          isUser
-            ? "bg-black text-[#FAFAFA] rounded-2xl rounded-tr-sm"
-            : "bg-white border border-[#E5E5E5] text-black rounded-2xl rounded-tl-sm"
-        }`}
-      >
-        {message.content}
-      </div>
-    </div>
-  );
-}
-
-function ChatInput({
-  value,
-  onChange,
-  onSubmit,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!disabled) onSubmit();
-      }}
-      className="border-t border-[#E5E5E5] p-3 md:p-4 bg-[#FAFAFA]"
-    >
-      <div className="flex items-center gap-2 border border-[#E5E5E5] focus-within:border-black bg-white pr-1">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Descreva as lições que você quer…"
-          className="flex-1 px-3 py-3 font-sora text-sm bg-transparent outline-none placeholder:text-[#999999]"
-          aria-label="Mensagem para o Content Producer"
-          disabled={disabled}
-        />
-        <button
-          type="submit"
-          disabled={disabled || !value.trim()}
-          aria-label="Enviar"
-          className="w-9 h-9 rounded-full bg-black text-[#FAFAFA] flex items-center justify-center disabled:opacity-30"
-        >
-          <ArrowUp size={16} />
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function PlanCard({
-  plan,
-  onConfirm,
-  onEdit,
-}: {
-  plan: GenerationPlan;
-  onConfirm: () => void;
-  onEdit: () => void;
-}) {
-  const total = plan.lessons.reduce((sum, l) => sum + l.count, 0);
-  const levels = Array.from(new Set(plan.lessons.map((l) => l.level)));
-  const themes = Array.from(new Set(plan.lessons.map((l) => l.theme)));
-
-  return (
-    <div className="border border-[#E5E5E5] bg-white">
-      <div className="bg-black text-[#FAFAFA] px-4 py-3 flex items-center gap-2">
-        <ClipboardList size={16} />
-        <h2 className="font-sora text-sm font-semibold">Plano de Geração / Generation Plan</h2>
-      </div>
-      <dl className="px-4 py-3 divide-y divide-[#E5E5E5] font-sora text-sm">
-        <PlanRow label="Número de lições" value={`${total}`} />
-        <PlanRow label="Nível" value={levels.map(getLevelLabel).join(", ")} />
-        <PlanRow label="Tema" value={themes.join(", ")} />
-        <PlanRow
-          label="Personagens"
-          value={`${plan.characters.app} & ${plan.characters.student}`}
-        />
-        <PlanRow
-          label="Tempo estimado"
-          value={`~${plan.estimatedMinutes} min`}
-        />
-      </dl>
-      <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-[#E5E5E5]">
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] hover:border-black font-sora text-sm"
-        >
-          <Pencil size={14} />
-          Editar Plano
-        </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="inline-flex items-center gap-2 px-3 py-2 bg-[#22C55E] hover:bg-[#16A34A] text-white font-sora text-sm"
-        >
-          <Check size={14} />
-          Confirmar e Gerar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PlanRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="py-2 flex items-center justify-between gap-3">
-      <dt className="font-mono text-[11px] tracking-[1px] text-[#5E5E5E] uppercase">
-        {label}
-      </dt>
-      <dd className="text-black text-right">{value}</dd>
-    </div>
-  );
-}
-
-function GenerationProgressCard({
-  job,
-  onRetry,
-  onCancel,
-}: {
-  job: JobSnapshot;
-  onRetry: (lessonIndex: number) => void;
-  onCancel?: () => void;
-}) {
-  const { progress } = job;
-  const percent = progress.total === 0 ? 0 : Math.round((progress.completed / progress.total) * 100);
-
-  return (
-    <div className="border border-[#E5E5E5] bg-white">
-      <div className="bg-black text-[#FAFAFA] px-4 py-3 flex items-center gap-2">
-        {job.status === "running" ? (
-          <Loader size={16} className="animate-spin" />
-        ) : (
-          <Check size={16} />
-        )}
-        <h2 className="font-sora text-sm font-semibold">
-          {job.status === "running" ? "Gerando Lições…" : "Geração concluída"}
-        </h2>
-      </div>
-      <div className="px-4 py-3 flex flex-col gap-3 border-b border-[#E5E5E5]">
-        <div className="flex items-center justify-between font-sora text-sm text-black">
-          <span>
-            {progress.completed} de {progress.total} lições criadas
-          </span>
-          <span className="font-mono text-[11px] tracking-[1px] text-[#5E5E5E]">{percent}%</span>
-        </div>
-        <div className="h-1.5 bg-[#E5E5E5] overflow-hidden">
-          <div
-            className="h-full bg-[#22C55E] transition-all"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      </div>
-      <ul className="px-4 py-2 divide-y divide-[#E5E5E5]">
-        {progress.lessons.map((lesson, idx) => (
-          <LessonRow key={`${lesson.level}-${lesson.theme}-${idx}`} lesson={lesson} index={idx} onRetry={onRetry} />
-        ))}
-      </ul>
-      {onCancel && (
-        <div className="px-4 py-3 border-t border-[#E5E5E5] flex justify-end">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="inline-flex items-center gap-2 px-3 py-2 border border-[#E5E5E5] hover:border-black font-sora text-sm"
-          >
-            <X size={14} />
-            Cancelar
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LessonRow({
-  lesson,
-  index,
-  onRetry,
-}: {
-  lesson: LessonProgress;
-  index: number;
-  onRetry: (idx: number) => void;
-}) {
-  return (
-    <li className="py-2 flex items-center gap-3" data-testid={`lesson-row-${index}`}>
-      <StatusIcon status={lesson.status} />
-      <div className="flex-1 min-w-0">
-        <div className="font-sora text-sm text-black truncate">
-          {lesson.title ?? lesson.theme}
-        </div>
-        <div className="font-mono text-[10px] tracking-[1px] uppercase text-[#5E5E5E]">
-          {getLevelLabel(lesson.level)}
-          {lesson.error ? ` · ${lesson.error}` : ""}
-        </div>
-      </div>
-      {lesson.status === "failed" && (
-        <button
-          type="button"
-          onClick={() => onRetry(index)}
-          className="inline-flex items-center gap-1 px-2 py-1 border border-[#DC2626] text-[#DC2626] hover:bg-[#FEF2F2] font-mono text-[10px] tracking-[1px]"
-          aria-label="Tentar novamente"
-        >
-          <RefreshCw size={12} />
-          TENTAR NOVAMENTE
-        </button>
-      )}
-    </li>
-  );
-}
-
-function StatusIcon({ status }: { status: LessonProgress["status"] }) {
-  if (status === "completed") {
-    return <CircleCheck size={18} className="text-[#22C55E] shrink-0" />;
-  }
-  if (status === "generating") {
-    return <Loader size={18} className="text-[#F59E0B] shrink-0 animate-spin" />;
-  }
-  if (status === "failed") {
-    return <CircleAlert size={18} className="text-[#DC2626] shrink-0" />;
-  }
-  return <CircleDashed size={18} className="text-[#999999] shrink-0" />;
-}
-
-function DoneFooter({ onStartOver }: { onStartOver: () => void }) {
-  return (
-    <div className="border-t border-[#E5E5E5] p-3 md:p-4 bg-[#FAFAFA] flex items-center justify-end">
-      <button
-        type="button"
-        onClick={onStartOver}
-        className="inline-flex items-center gap-2 px-3 py-2 font-sora text-sm text-[#5E5E5E] hover:text-black"
-      >
-        <RotateCcw size={14} />
-        Nova conversa
-      </button>
     </div>
   );
 }

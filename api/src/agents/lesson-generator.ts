@@ -1,5 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import OpenAI from "openai";
+import { z } from "zod";
 import { pool } from "../lib/db.js";
 import { uploadObject } from "../lib/storage.js";
 
@@ -94,16 +95,158 @@ export const LEVELS = ["beginner", "intermediate", "advanced"] as const;
 export type Level = (typeof LEVELS)[number];
 export const LESSONS_PER_LEVEL = 20;
 
+const UNIQUE_TITLE_INDEX_NAME = "lessons_title_lower_unique_idx";
+let ensureTitleIndexPromise: Promise<void> | null = null;
+
 export function pickTheme(level: string, themeIndex: number): string {
   const themes = LESSON_THEMES[level] ?? LESSON_THEMES.beginner;
   return themes[themeIndex] ?? themes[0];
 }
 
+function normalizeTitleKey(title: string): string {
+  return title.trim().toLowerCase();
+}
+
+function isProbablyEnglishTitle(title: string): boolean {
+  if (!title.trim()) return false;
+  if (/[^\x00-\x7F]/.test(title)) return false;
+  return !/(\b(li[cç][aã]o|li[cç][oõ]es|aula|aulas|você|para|com|sobre|tema|nível|iniciant[eé]|intermedi[aá]rio|avançad[ao]|vocabul[aá]rio|diálogo|di[aá]logo)\b)/i.test(title);
+}
+
+export async function ensureLessonTitleIndex(): Promise<void> {
+  if (!ensureTitleIndexPromise) {
+    ensureTitleIndexPromise = pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS ${UNIQUE_TITLE_INDEX_NAME}
+       ON lessons (LOWER(title))`
+    ).then(() => undefined);
+  }
+  await ensureTitleIndexPromise;
+}
+
+async function titleExists(title: string): Promise<boolean> {
+  const { rows } = await pool.query<{ exists: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM lessons WHERE LOWER(title) = LOWER($1)) AS exists",
+    [title]
+  );
+  return rows[0]?.exists ?? false;
+}
+
+function buildTitleModel() {
+  return new ChatOpenAI({
+    model: process.env.OPENAI_MODEL_CHAT ?? "gpt-4o-mini",
+    temperature: 0.2,
+  });
+}
+
+function extractTitleCandidate(raw: unknown): string | null {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as { title?: unknown };
+      if (typeof parsed.title === "string" && parsed.title.trim()) return parsed.title.trim();
+    } catch {
+      return trimmed;
+    }
+    return trimmed;
+  }
+
+  if (typeof raw === "object" && raw !== null) {
+    const maybeRecord = raw as Record<string, unknown>;
+    const title = maybeRecord.title;
+    if (typeof title === "string" && title.trim()) return title.trim();
+    const content = maybeRecord.content;
+    if (typeof content === "string" && content.trim()) {
+      try {
+        const parsed = JSON.parse(content) as { title?: unknown };
+        if (typeof parsed.title === "string" && parsed.title.trim()) return parsed.title.trim();
+      } catch {
+        return content.trim();
+      }
+      return content.trim();
+    }
+  }
+
+  return null;
+}
+
+async function rewriteLessonTitle(
+  level: string,
+  theme: string,
+  draftTitle: string,
+  existingTitles: string[]
+): Promise<string> {
+  const llm = buildTitleModel();
+  const raw = await llm.invoke([
+    {
+      role: "system",
+      content: [
+        "You write short lesson titles for English-learning lessons.",
+        "Return only an English title.",
+        "Do not use Portuguese.",
+        "Avoid repeating existing titles.",
+        "Keep it concise and natural.",
+      ].join(" "),
+    },
+    {
+      role: "user",
+      content: `Level: ${level}\nTheme: ${theme}\nDraft title: ${draftTitle}\nExisting titles: ${existingTitles.join(" | ")}`,
+    },
+  ]);
+
+  const candidate = extractTitleCandidate(raw);
+  if (!candidate) {
+    throw new Error("Failed to generate an English lesson title");
+  }
+  return candidate;
+}
+
+export async function ensureUniqueEnglishLessonTitle(
+  level: string,
+  theme: string,
+  draftTitle: string,
+  existingTitles: string[] = []
+): Promise<string> {
+  const seen = new Set(existingTitles.map(normalizeTitleKey));
+  let candidate = draftTitle.trim();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (candidate && isProbablyEnglishTitle(candidate) && !seen.has(normalizeTitleKey(candidate))) {
+      return candidate;
+    }
+
+    const refreshed = existingTitles.concat([...seen]);
+    candidate = await rewriteLessonTitle(level, theme, candidate || theme, refreshed);
+  }
+
+  throw new Error("Unable to generate a unique English lesson title");
+}
+
+async function insertLessonWithTitle(level: string, theme: string, title: string): Promise<{ id: string; title: string; level: string }> {
+  const { rows } = await pool.query(
+    "INSERT INTO lessons (title, level) VALUES ($1, $2) RETURNING *",
+    [title, level]
+  );
+  const lesson = rows[0];
+  if (!lesson) {
+    throw new Error(`Failed to insert lesson row for ${theme}`);
+  }
+  return lesson;
+}
+
+/**
+ * Generate lesson content for a given level.
+ * Pass either a numeric `themeIndex` (index into the built-in LESSON_THEMES
+ * list) OR a free-form `themeString` (user-supplied topic). When both are
+ * provided, `themeString` takes precedence so custom Mode-B requests are
+ * not silently remapped to an index-0 fallback.
+ */
 export async function generateLessonContent(
   level: string,
-  themeIndex: number
+  themeIndex: number,
+  themeString?: string
 ): Promise<{ title: string; exchanges: DialogueExchange[] }> {
-  const theme = pickTheme(level, themeIndex);
+  const theme = themeString?.trim() || pickTheme(level, themeIndex);
 
   const llm = new ChatOpenAI({
     model: process.env.OPENAI_MODEL_CHAT ?? "gpt-4o-mini",
@@ -118,9 +261,10 @@ Generate a natural dialogue between two characters: "Aimee" (app) and "Todd" (st
 
 ${LEVEL_INSTRUCTIONS[level]}
 
-Return ONLY a JSON object:
-{
-  "title": "lesson title in English",
+        Return ONLY a JSON object.
+        The title must be in English, concise, and unique among lesson titles.
+        {
+          "title": "lesson title in English",
   "exchanges": [
     {
       "order_index": 0,
@@ -137,7 +281,9 @@ Rules:
 - First speaker is always "app" (Aimee)
 - Each line should flow naturally from the previous one
 - Translations should be natural Brazilian Portuguese, not literal
-- The title should be a short phrase describing the lesson theme`,
+        - The title should be a short English phrase describing the lesson theme
+        - Never use Portuguese in the title
+        - Avoid titles that sound identical to existing lesson titles`,
     },
     {
       role: "user",
@@ -178,6 +324,8 @@ export async function generateAudio(
 export interface GenerateLessonOptions {
   level: string;
   themeIndex: number;
+  /** Optional free-form topic string (overrides themeIndex lookup). */
+  themeString?: string;
   onAudioProgress?: (completed: number, total: number) => void;
 }
 
@@ -194,17 +342,61 @@ export interface GenerateLessonResult {
 export async function generateAndPersistLesson(
   options: GenerateLessonOptions
 ): Promise<GenerateLessonResult> {
-  const { level, themeIndex, onAudioProgress } = options;
-  const lessonLabel = `${level} lesson ${themeIndex + 1}`;
+  await ensureLessonTitleIndex();
+  const { level, themeIndex, themeString, onAudioProgress } = options;
+  const lessonLabel = themeString ?? `${level} lesson ${themeIndex + 1}`;
 
-  const { title, exchanges } = await generateLessonContent(level, themeIndex);
+  const { title: draftTitle, exchanges } = await generateLessonContent(level, themeIndex, themeString);
+  const { rows: titleRows } = await pool.query<{ title: string }>(
+    "SELECT title FROM lessons"
+  );
+  const existingTitles = titleRows.map((row) => row.title);
 
-  const { rows: lessonRows } = await pool.query(
-    "INSERT INTO lessons (title, level) VALUES ($1, $2) RETURNING *",
-    [title, level]
+  let title = await ensureUniqueEnglishLessonTitle(
+    level,
+    themeString ?? pickTheme(level, themeIndex),
+    draftTitle,
+    existingTitles
   );
 
-  const lesson = lessonRows[0];
+  let lesson: { id: string; title: string; level: string } | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await titleExists(title)) {
+      const refreshedTitles = (await pool.query<{ title: string }>("SELECT title FROM lessons")).rows.map(
+        (row) => row.title
+      );
+      title = await ensureUniqueEnglishLessonTitle(
+        level,
+        themeString ?? pickTheme(level, themeIndex),
+        `${draftTitle} (${attempt + 2})`,
+        refreshedTitles
+      );
+      continue;
+    }
+
+    try {
+      lesson = await insertLessonWithTitle(level, lessonLabel, title);
+      break;
+    } catch (err) {
+      const isUniqueViolation =
+        typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "23505";
+      if (!isUniqueViolation) {
+        throw err;
+      }
+
+      const refreshedTitles = (await pool.query<{ title: string }>("SELECT title FROM lessons")).rows.map(
+        (row) => row.title
+      );
+      lesson = null;
+      title = await ensureUniqueEnglishLessonTitle(
+        level,
+        themeString ?? pickTheme(level, themeIndex),
+        `${draftTitle} (${attempt + 2})`,
+        refreshedTitles
+      );
+    }
+  }
+
   if (!lesson) {
     throw new Error(`Failed to insert lesson row for ${lessonLabel}`);
   }
@@ -230,8 +422,10 @@ export async function generateAndPersistLesson(
         ]
       );
 
-      completedAudio += 1;
-      onAudioProgress?.(completedAudio, exchanges.length);
+      // Pre-increment so the value captured by the callback is always
+      // the final count after this exchange — avoids a stale read in
+      // concurrent microtask continuations.
+      onAudioProgress?.(++completedAudio, exchanges.length);
     })
   );
 

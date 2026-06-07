@@ -74,16 +74,25 @@ export default async function LessonsPage({ params }: PageProps) {
               Nenhuma lição de {titles.pt.toLowerCase()} ainda
             </h2>
             <p className="font-sora text-sm text-[#5E5E5E]">
-              Peça ao Content Producer para criar lições neste nível. Você pode descrever um
-              tema ou começar com o template rápido.
+              Você pode começar contando suas preferências ou gerar sugestões rápidas para este
+              nível.
             </p>
-            <Link
-              href="/create-lessons"
-              className="inline-flex items-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
-            >
-              <Sparkles size={16} />
-              Criar lições de {titles.pt.toLowerCase()}
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <Link
+                href={`/create-lessons?mode=guided&level=${level}`}
+                className="inline-flex items-center justify-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
+              >
+                <Sparkles size={16} />
+                Criar com minhas preferências
+              </Link>
+              <Link
+                href={`/create-lessons?mode=quick&level=${level}`}
+                className="inline-flex items-center justify-center gap-2 border border-[#E5E5E5] px-4 py-2 font-sora text-sm text-black hover:border-black"
+              >
+                <Sparkles size={16} />
+                Gerar sugestões deste nível
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3">

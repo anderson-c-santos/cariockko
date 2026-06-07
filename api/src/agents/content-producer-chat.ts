@@ -8,37 +8,36 @@ export const SYSTEM_PROMPT = [
   "# Seu papel",
   "Seu único objetivo é ajudar o usuário a **criar novas lições de inglês**. Você conversa com o usuário, entende o que ele quer aprender, e então apresenta um **Plano de Geração** estruturado. Você só cria lições depois que o usuário confirmar o plano.",
   "",
-  "# Escopo (em)",
-  "- Aceitar pedidos de criação de lições (com temas, níveis, quantidade).",
-  "- Sugerir temas populares quando o usuário pedir algo genérico.",
-  "- Pedir esclarecimentos curtos (nível, quantidade, tema) antes de propor o plano.",
-  "- Sempre responder em **português brasileiro** (pt-BR).",
+  "# O que é pedido de lição (SEMPRE aceite)",
+  "Qualquer mensagem que mencione criar, gerar, produzir ou montar lições é um pedido de lição. Exemplos:",
+  '- "Gere lições genéricas para mim" → aceite, sugira temas e níveis.',
+  '- "Quero criar 5 lições sobre viagens" → aceite diretamente.',
+  '- "apenas crie as licoes genericas" → aceite, proponha um plano com defaults.',
+  '- "Me faz umas lições de intermediário" → aceite, proponha temas.',
+  "NÃO acione o guardrail para pedidos de lições. O guardrail é SOMENTE para coisas que NÃO são criar lições.",
   "",
-  "# Fora do escopo (guardrails) — RECUSE e redirecione",
+  "# Guardrail — SOMENTE para conteúdo fora do escopo",
+  "Acione o guardrail APENAS quando o pedido não tiver NENHUMA relação com criar lições de inglês:",
   '- Perguntas de gramática ("o que é past perfect?", "explique present continuous").',
   '- Pedidos de tradução ("como se diz X em inglês?").',
-  '- Pedidos genéricos que não sejam lições ("escreva um poema", "conte uma piada", "me ajude com redação").',
-  "- Dúvidas sobre o app que não sejam criação de lições.",
-  "- Qualquer pedido que não seja **criar uma lição de inglês**.",
+  '- Pedidos que não são lições ("escreva um poema", "conte uma piada", "me ajude com redação").',
+  '- Dúvidas sobre o app que não sejam criação de lições.',
   "",
-  "Quando recusar, use exatamente este tom (varie levemente, mas mantenha a essência):",
-  "> Eu estou aqui para te ajudar a **criar novas lições** no Cariockko. Para [motivo da recusa], o ideal é praticar com uma das suas lições existentes ou criar uma lição focada em [tema relacionado]. Quer que eu crie uma lição sobre isso?",
-  "",
-  'Em seguida, ofereça uma sugestão prática (ex.: "Posso criar 3 lições intermediárias sobre o tema X").',
-  "",
-  "# Como decidir se o plano está pronto",
-  "Proponha o plano (ready: true) quando você tiver coletado:",
-  "1. **Quantidade** de lições (sugira 3–10 por padrão; máximo absoluto 60 no total, 20 por nível).",
-  "2. **Nível(is)**: beginner / intermediate / advanced (pode ser mais de um).",
-  "3. **Tema(s)** dos diálogos (se o usuário não especificou, sugira 1–3 temas coerentes).",
-  "",
-  "Se ainda faltar algum desses, faça UMA pergunta curta e devolva ready: false.",
+  "# Como decidir o plano",
+  "Quando o usuário pedir lições genéricas sem especificar detalhes, use SENSATO DEFAULTS:",
+  "- Proponha lições com cenários concretos do dia a dia.",
+  "- Prefira 3 a 5 lições com temas distintos em vez de repetir o mesmo tema.",
+  "- Mantenha um único tema central por plano e derive variações desse mesmo contexto.",
+  "- Se o usuário trouxer um tema específico, preserve esse tema e expanda em subcontextos relacionados.",
+  "- Cada item do plano representa uma única lição; use count: 1 em cada item.",
+  "- Proponha o plano imediatamente com ready: true.",
+  "Só peça mais informações se o pedido for ambíguo demais para sugerir defaults razoáveis.",
   "",
   "# Personagens (fixo)",
   "Sempre use Aimee (app) e Todd (student).",
   "",
   "# Formato da resposta",
-  "Responda SEMPRE como JSON válido, sem markdown, sem comentários.",
+  "Responda SEMPRE em português brasileiro. A estrutura da resposta é controlada automaticamente — não precisa se preocupar com formatação.",
 ].join("\n");
 
 export const PlanLessonSchema = z.object({
@@ -61,12 +60,14 @@ export const PlanSchema = z.object({
         .default({ app: "Aimee", student: "Todd" }),
       estimatedMinutes: z.number().int().min(1).max(60),
     })
+    .nullable()
     .optional(),
   guardrail: z
     .object({
       triggered: z.literal(true),
       suggestedTopic: z.string().optional(),
     })
+    .nullable()
     .optional(),
 });
 
@@ -142,10 +143,27 @@ export function detectGuardrailHeuristic(message: string): boolean {
 }
 
 function asHistory(messages: ChatMessage[]): Array<{ role: "user" | "assistant"; content: string }> {
-  return messages.map((m) => ({
-    role: m.role === "system" ? "user" : m.role,
-    content: m.content,
-  }));
+  // Filter out system messages — the agent prepends its own system prompt.
+  // For assistant messages that included a plan, we prepend a structured
+  // summary so the LLM retains context about what it already proposed.
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => {
+      let content = m.content;
+      if (m.role === "assistant" && m.plan) {
+        const planSummary = m.plan.lessons
+          .map((l) => `${l.count}x ${l.level} "${l.theme}"`)
+          .join(", ");
+        content = `[Plano já proposto: ${planSummary}] ${content}`;
+      }
+      return { role: m.role as "user" | "assistant", content };
+    });
+}
+
+function summarizePlan(plan: NonNullable<Plan["plan"]>): string {
+  const totalLessons = plan.lessons.reduce((sum, lesson) => sum + lesson.count, 0);
+  const topics = plan.lessons.map((lesson) => lesson.theme).join(", ");
+  return `Perfeito. Montei um plano com ${totalLessons} lições sobre ${topics}. Se quiser editar, me diga o que mudar: nível, tema, quantidade ou contexto.`;
 }
 
 export interface ChatOptions {
@@ -173,22 +191,61 @@ export async function chat(options: ChatOptions): Promise<ChatTurnResult> {
   ];
 
   const raw = (await llm.invoke(llmMessages)) as Plan;
-  const validated = PlanSchema.parse(raw);
+  const parsed = PlanSchema.safeParse(raw);
+
+  let validated: Plan;
+  if (parsed.success) {
+    validated = parsed.data;
+  } else {
+    // If structured output parsing fails, fall back to a minimal valid
+    // plan so the conversation doesn't break. Log for debugging.
+    console.error("[content-producer] PlanSchema parse failed:", parsed.error.format());
+    validated = {
+      ready: false,
+      reply: typeof raw === "object" && raw !== null && "reply" in raw
+        ? String((raw as Record<string, unknown>).reply ?? "")
+        : "Desculpe, tive um problema ao processar sua mensagem. Pode repetir?",
+      plan: null,
+      guardrail: null,
+    };
+  }
 
   // If the heuristic flagged the message as obviously out-of-scope and the
   // model didn't trip its own guardrail, force one to keep behaviour
   // predictable in obvious cases (cheap belt-and-braces).
   const heuristic = detectGuardrailHeuristic(message);
+
+  // Defensive: if the user is clearly asking to create lessons but the
+  // LLM incorrectly triggered the guardrail, override it.
+  const LESSON_KEYWORDS = /li[cç][aã]o|li[cç][oõ]es|aula|aulas|gerar|criar|crie|montar|produzir/i;
+  const userWantsLessons = LESSON_KEYWORDS.test(message);
+  const guardrailOverridden = userWantsLessons && validated.guardrail;
+
   const finalPlan: Plan = {
     ...validated,
+    // When we override the guardrail, the reply text is likely the
+    // refusal template — replace it with a helpful response.
+    reply: guardrailOverridden
+      ? "Claro! Vou montar um plano de lições para você. Aqui está uma sugestão:"
+      : validated.reply,
     guardrail:
-      validated.guardrail ?? (heuristic ? { triggered: true } : undefined),
+      guardrailOverridden
+        ? undefined  // Override false-positive guardrail
+      : validated.guardrail ?? (heuristic ? { triggered: true } : undefined),
+    plan: validated.plan,
   };
+
+  const coherentPlan = finalPlan.plan ?? undefined;
+  const reply =
+    finalPlan.reply.trim() ||
+    (coherentPlan
+      ? summarizePlan(coherentPlan)
+      : "Claro. Me diga como você quer seguir com as lições.");
 
   const assistantMessage: ChatMessage = {
     role: "assistant",
-    content: finalPlan.reply,
-    plan: finalPlan.plan,
+    content: reply,
+    plan: coherentPlan,
     guardrail: finalPlan.guardrail,
   };
 
@@ -200,8 +257,8 @@ export async function chat(options: ChatOptions): Promise<ChatTurnResult> {
   await saveSession(sessionId, nextHistory);
 
   return {
-    reply: finalPlan.reply,
-    plan: finalPlan.plan,
+    reply,
+    plan: coherentPlan,
     guardrail: finalPlan.guardrail,
     raw: finalPlan,
   };
