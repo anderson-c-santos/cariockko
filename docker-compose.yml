@@ -43,8 +43,8 @@ services:
         condition: service_completed_successfully
     healthcheck:
       # Liveness probe: passes as soon as the HTTP server is up (~2-3s after
-      # container start). Seeding runs in the background; poll /health/ready
-      # (via `make wait-ready`) to know when lessons are fully available.
+      # container start). Lessons are no longer auto-seeded; users create
+      # them on demand via the Content Producer tab.
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health/live"]
       interval: 5s
       timeout: 5s

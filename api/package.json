@@ -8,26 +8,34 @@
     "start": "node dist/index.js",
     "serve": "tsx src/entrypoint.ts",
     "seed-lessons": "tsx src/scripts/seed-lessons.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "pg": "^8.13.0",
     "@aws-sdk/client-s3": "^3.650.0",
     "@aws-sdk/s3-request-presigner": "^3.650.0",
     "@langchain/openai": "^0.3.0",
-    "openai": "^4.70.0",
-    "multer": "^1.4.5-lts.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.70.0",
+    "pg": "^8.13.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^22.0.0",
+    "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/multer": "^1.4.12",
-    "@types/cors": "^2.8.17",
+    "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
-    "tsx": "^4.19.0"
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.8"
   }
 }
