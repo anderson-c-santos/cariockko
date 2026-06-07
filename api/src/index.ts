@@ -4,7 +4,7 @@ import multer from "multer";
 import { lessonsRouter } from "./routes/lessons.js";
 import { speakingTutorRouter } from "./routes/speaking-tutor.js";
 import { progressRouter } from "./routes/progress.js";
-import { getLessonCount, EXPECTED_LESSON_COUNT } from "./agents/content-producer.js";
+import { contentProducerRouter } from "./routes/content-producer.js";
 
 const app = express();
 const port = process.env.PORT ?? 3001;
@@ -20,22 +20,20 @@ app.get("/health", (_req, res) => {
 
 // Liveness probe: the server is up and accepting connections.
 // Used by Docker's healthcheck so the container is marked healthy as soon
-// as the HTTP server starts, even while seeding is still running in the background.
+// as the HTTP server starts. The app no longer auto-seeds, so the
+// container can be marked healthy immediately.
 app.get("/health/live", (_req, res) => {
   res.json({ status: "live" });
 });
 
-// Readiness probe: seeding is complete and the API can serve lesson data.
-// Returns 503 while seeding is in progress. Poll this endpoint to wait for
-// the system to be fully ready (e.g. from `make wait-ready`).
+// Readiness probe: the app is ready to serve (DB connected).
+// Lessons are now created on demand via the Content Producer, so the
+// only thing to check is that the database is reachable.
 app.get("/health/ready", async (_req, res) => {
   try {
-    const count = await getLessonCount();
-    if (count >= EXPECTED_LESSON_COUNT) {
-      res.json({ status: "ready", lessons: count });
-    } else {
-      res.status(503).json({ status: "seeding", lessons: count, expected: EXPECTED_LESSON_COUNT });
-    }
+    const { pool } = await import("./lib/db.js");
+    await pool.query("SELECT 1");
+    res.json({ status: "ready" });
   } catch {
     res.status(503).json({ status: "error" });
   }
@@ -44,6 +42,7 @@ app.get("/health/ready", async (_req, res) => {
 app.use("/api/lessons", lessonsRouter);
 app.use("/api/speaking-tutor", upload.single("audio"), speakingTutorRouter);
 app.use("/api/progress", progressRouter);
+app.use("/api/content-producer", contentProducerRouter);
 
 app.listen(port, () => {
   console.log(`Cariockko API running on port ${port}`);

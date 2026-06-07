@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -66,16 +66,24 @@ export default async function LessonsPage({ params }: PageProps) {
         )}
 
         {!lessons || lessons.length === 0 ? (
-          <div className="flex flex-col items-center py-12 gap-2">
-            <p className="font-sora text-lg text-[#5E5E5E]">
-              Nenhuma lição encontrada
+          <div className="border border-[#E5E5E5] p-6 flex flex-col items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-black text-[#FAFAFA] flex items-center justify-center">
+              <Sparkles size={18} />
+            </div>
+            <h2 className="font-sora text-lg font-semibold text-black">
+              Nenhuma lição de {titles.pt.toLowerCase()} ainda
+            </h2>
+            <p className="font-sora text-sm text-[#5E5E5E]">
+              Peça ao Content Producer para criar lições neste nível. Você pode descrever um
+              tema ou começar com o template rápido.
             </p>
-            <p className="font-sora text-sm text-[#999999]">
-              No lessons found. Run the seed script first.
-            </p>
-            <code className="mt-4 text-sm bg-[#F5F5F5] p-3 font-mono text-[#5E5E5E]">
-              docker-compose run --rm api npm run seed-lessons
-            </code>
+            <Link
+              href="/create-lessons"
+              className="inline-flex items-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
+            >
+              <Sparkles size={16} />
+              Criar lições de {titles.pt.toLowerCase()}
+            </Link>
           </div>
         ) : (
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3">

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
+import { apiFetch } from "@/lib/api";
+import { Sparkles, BookOpen } from "lucide-react";
 
 const levels = [
   {
@@ -22,7 +24,23 @@ const levels = [
   },
 ];
 
-export default function Home() {
+interface Lesson {
+  id: string;
+  title: string;
+  level: string;
+}
+
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  let totalLessons = 0;
+  try {
+    const lessons = await apiFetch<Lesson[]>("/api/lessons");
+    totalLessons = lessons.length;
+  } catch {
+    totalLessons = 0;
+  }
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
@@ -36,9 +54,33 @@ export default function Home() {
           </p>
         </div>
 
-        <h2 className="font-sora text-xl md:text-2xl font-semibold tracking-[-1px] text-black">
-          Escolha seu nível / Choose your level
-        </h2>
+        {totalLessons === 0 && (
+          <div className="border border-[#E5E5E5] p-6 flex flex-col gap-3 items-start">
+            <div className="w-10 h-10 rounded-full bg-black text-[#FAFAFA] flex items-center justify-center">
+              <Sparkles size={18} />
+            </div>
+            <h2 className="font-sora text-lg font-semibold text-black">
+              Você ainda não tem lições
+            </h2>
+            <p className="font-sora text-sm text-[#5E5E5E]">
+              Crie suas primeiras lições personalizadas com o Content Producer — escolha temas,
+              níveis e quantidade em uma conversa guiada.
+            </p>
+            <Link
+              href="/create-lessons"
+              className="inline-flex items-center gap-2 bg-black text-[#FAFAFA] px-4 py-2 font-sora text-sm hover:opacity-90"
+            >
+              <Sparkles size={16} />
+              Criar minhas primeiras lições
+            </Link>
+          </div>
+        )}
+
+        {totalLessons > 0 && (
+          <h2 className="font-sora text-xl md:text-2xl font-semibold tracking-[-1px] text-black">
+            Escolha seu nível / Choose your level
+          </h2>
+        )}
 
         <div className="flex flex-col gap-4 md:gap-6">
           {levels.map((level) => (
@@ -60,6 +102,16 @@ export default function Home() {
             </Link>
           ))}
         </div>
+
+        {totalLessons > 0 && (
+          <Link
+            href="/create-lessons"
+            className="inline-flex items-center gap-2 self-start font-sora text-sm text-[#5E5E5E] hover:text-black"
+          >
+            <BookOpen size={14} />
+            Criar mais lições
+          </Link>
+        )}
       </main>
     </div>
   );

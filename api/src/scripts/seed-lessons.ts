@@ -2,7 +2,7 @@ import "dotenv/config";
 import { seedLessons } from "../agents/content-producer.js";
 
 async function main() {
-  console.log("🌱 Starting lesson seed...\n");
+  console.log("Starting lesson seed...\n");
 
   try {
     await seedLessons();

@@ -1,64 +1,28 @@
 import "dotenv/config";
-import {
-  seedLessons,
-  getLessonCount,
-  EXPECTED_LESSON_COUNT,
-} from "./agents/content-producer.js";
+import { pool } from "./lib/db.js";
 
-async function seedIfNeeded() {
-  const count = await getLessonCount();
-
-  if (count >= EXPECTED_LESSON_COUNT) {
-    console.log(`Found ${count}/${EXPECTED_LESSON_COUNT} lessons. Skipping seed.`);
-    return;
-  }
-
-  console.log(
-    `Found ${count}/${EXPECTED_LESSON_COUNT} lessons. Running seed...`
+async function recoverInterruptedJobs(): Promise<void> {
+  // If the API crashes mid-generation, any `running` job rows are stale —
+  // mark them as failed so the user can see the situation and retry.
+  // Persisted lessons from a previous boot are untouched.
+  const { rowCount } = await pool.query(
+    `UPDATE lesson_generation_jobs
+     SET status = 'failed',
+         error = COALESCE(error, 'Server restarted before generation completed'),
+         updated_at = now()
+     WHERE status IN ('pending', 'running')`
   );
-
-  const maxRetries = 3;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      await seedLessons();
-      const finalCount = await getLessonCount();
-      if (finalCount >= EXPECTED_LESSON_COUNT) {
-        console.log(`Seed complete: ${finalCount}/${EXPECTED_LESSON_COUNT} lessons.`);
-        return;
-      }
-      console.warn(
-        `Seed attempt ${attempt}: ${finalCount}/${EXPECTED_LESSON_COUNT} lessons. Retrying...`
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      console.error(`Seed attempt ${attempt} failed: ${message}`);
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
-      }
-    }
+  if (rowCount && rowCount > 0) {
+    console.log(`[startup] Marked ${rowCount} interrupted job(s) as failed.`);
   }
-
-  console.error(
-    `Failed to seed all lessons after ${maxRetries} attempts. The API is still running but may serve incomplete data.`
-  );
 }
 
-async function startServer() {
+async function main(): Promise<void> {
   console.log("Starting API server...");
+
+  await recoverInterruptedJobs();
+
   await import("./index.js");
-}
-
-async function main() {
-  // Start the HTTP server first so healthcheck probes and readiness endpoints
-  // respond immediately. Seeding then runs in the background.
-  await startServer();
-
-  // Fire-and-forget: seeding runs asynchronously after the server is up.
-  // /health/ready will return 503 until seeding finishes, but /health/live
-  // will return 200 as soon as the server is up.
-  seedIfNeeded().catch((err) => {
-    console.error("Background seed error:", err);
-  });
 }
 
 main().catch((err) => {
